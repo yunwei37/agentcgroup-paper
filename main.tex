@@ -45,6 +45,25 @@
 }
 \email{yzhen165@ucsc.edu}
 
+
+\author{Jiakun Fan}
+\affiliation{%
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{VA}
+  \country{USA}
+}
+\email{quanzhif@vt.edu}
+
+\author{Quanzhi Fu}
+\affiliation{%
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{VA}
+  \country{USA}
+}
+\email{jiakunfan@vt.edu}
+
 \begin{abstract}
 	Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage patterns in production AI coding agents, analyzing 18 SWE-rebench tasks across two models. Our measurements reveal severe mismatches: memory usage fluctuates by up to 3GB within single-second intervals, resource requirements vary by 147\% (CV) across task categories, and CPU utilization differs by 3.9$\times$ between agents on identical tasks. These findings expose two fundamental gaps: \textbf{domain mismatch} (static container-level limits cannot accommodate phase-varying tool calls) and \textbf{timescale mismatch} (user-space controllers at 10--100ms cannot react to second-scale bursts). We present \sys, an eBPF-based resource controller that executes control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands. Evaluation demonstrates improved multi-tenant isolation and reduced resource waste from 76--93\% to significantly lower levels.
 \end{abstract}
