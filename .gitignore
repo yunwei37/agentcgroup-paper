@@ -1,0 +1,35 @@
+# LaTeX generated files
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
+comment.cut
+# PDF output
+*.pdf
+
+# Editor files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data files (traces)
+data/
+
+# Linux kernel source/build (too large for GitHub)
+memcg/linux/

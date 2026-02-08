@@ -1,0 +1,31 @@
+{
+  "completed": [
+    "Web_Network_Easy",
+    "SQL_Data_Easy",
+    "CLI_Tools_Easy",
+    "DevOps_Build_Easy"
+  ],
+  "results": {
+    "Web_Network_Easy": {
+      "success": true,
+      "attempts": 1,
+      "total_time": 213.667249
+    },
+    "SQL_Data_Easy": {
+      "success": true,
+      "attempts": 1,
+      "total_time": 305.789627
+    },
+    "CLI_Tools_Easy": {
+      "success": true,
+      "attempts": 1,
+      "total_time": 238.183015,
+      "note": "Originally marked failed due to xfailed detection bug"
+    },
+    "DevOps_Build_Easy": {
+      "success": true,
+      "attempts": 1,
+      "total_time": 317.667775
+    }
+  }
+}
