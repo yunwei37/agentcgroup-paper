@@ -346,7 +346,38 @@ python analysis/analyze_rq_validation.py --all
 
 RQ2 burst 归因中的 **50.6%**（工具调用占采样时间的比例）与 **~35% 中位数**的差异来源：burst 归因以资源采样点（`sampling_duration`）为分母，而工具时间比以 `active_time` 为分母，两者范围接近但不完全相同（`active_time` 包含首末 trace 之间不在采样范围内的少量时间）。
 
-### 5.5 新增分析脚本
+### 5.5 端到端延迟分解
+
+#### View A（论文采用）：以 active_time 为主，容器启动单独提
+
+- **Agent 活跃时间（active_time）分解**：~40% 工具执行 / ~60% LLM 思考（两模型一致）
+- **容器启动额外开销**：在 active_time 之外，容器启动（userns ID 映射、overlay 准备）还额外增加 29–45% 的端到端延迟（Haiku 47.7%、GLM 31.0%，以 claude_time 为分母）
+- Permission fix 仅占 ~5%（实验 artifact，生产环境无此开销）
+
+#### 完整数据（perm_fix + claude_time 为分母）
+
+| 分解 | Haiku (n=33) | GLM (n=111) |
+|------|-------------|-------------|
+| Permission fix | mean 5.2% (16s) | mean 4.7% (27s) |
+| Container init (userns) | mean 44.9% (158s) | mean 29.1% (168s) |
+| Tool execution | mean 24.9% (108s) | mean 24.5% (180s) |
+| LLM thinking | mean 25.1% (81s) | mean 41.7% (298s) |
+| **Total infra (pf+init+tool)** | **mean 74.9%** | **mean 58.3%** |
+
+#### 去掉 perm_fix（claude_time 为分母）
+
+| 分解 | Haiku (n=33) | GLM (n=111) |
+|------|-------------|-------------|
+| Container init | mean 47.7%, median 53.4% | mean 31.0%, median 29.6% |
+| Tool execution | mean 25.9%, median 22.1% | mean 25.5%, median 23.1% |
+| LLM thinking | mean 26.4%, median 25.3% | mean 43.5%, median 42.1% |
+
+**关键发现**：
+1. 工具执行占 agent 活跃时间的 ~40%，且驱动 98.5% 的内存突发 → OS 级资源管理直接影响近一半有效执行时间
+2. 容器启动额外增加 29–45% 端到端延迟 → 容器基础设施层面优化同样关键
+3. Permission fix 仅 ~5%，可忽略（生产环境不存在）
+
+### 5.6 新增分析脚本
 
 | 脚本 | 路径 | 功能 |
 |------|------|------|

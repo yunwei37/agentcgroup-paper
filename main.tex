@@ -87,7 +87,7 @@
 
 
 \begin{abstract}
-	Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage patterns in production AI coding agents, analyzing 18 SWE-rebench tasks across two models. Our measurements reveal severe mismatches: memory usage fluctuates by up to 3GB within single-second intervals, resource requirements vary by 147\% (CV) across task categories, and CPU utilization differs by 3.9$\times$ between agents on identical tasks. These findings expose two fundamental gaps: \textbf{domain mismatch} (static container-level limits cannot accommodate phase-varying tool calls) and \textbf{timescale mismatch} (user-space controllers at 10--100ms cannot react to second-scale bursts). We present \sys, an eBPF-based resource controller that executes control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands. Evaluation demonstrates improved multi-tenant isolation and reduced resource waste from 76--93\% to significantly lower levels.
+Rapidly being deployed in multi-tenant cloud environments, Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage in production AI coding agents, analyzing 144 SWE-rebench tasks across two models (cloud API and local GPU). Our measurements reveal that tool execution consumes approximately 40\% of agent active time, drives 98.5\% of memory bursts, and exhibits a 15.4$\times$ peak-to-average memory ratio---while container startup adds a further 29--45\% end-to-end latency overhead. Comparing these characteristics against serverless, microservice, and batch workloads, we identify three fundamental gaps in existing resource management: a \emph{granularity gap} (container-level policies vs.\ tool-call-level dynamics), a \emph{timescale gap} (user-space reaction vs.\ second-scale bursts), and a \emph{predictability gap} (history-based prediction vs.\ non-deterministic execution). We present \sys, an eBPF-based resource controller that addresses these gaps through hierarchical cgroup structures aligned with tool-call boundaries, in-kernel enforcement via sched\_ext and memcg\_bpf\_ops, and runtime-adaptive policies. Preliminary evaluation demonstrates improved multi-tenant isolation and reduced resource waste.
 \end{abstract}
 
 % \begin{CCSXML}
@@ -114,21 +114,25 @@
 
 \section{Introduction}
 
-Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, including compilers, interpreters, test runners, and data processors. To understand their resource behavior, we conducted the first systematic measurement study of production AI coding agents, analyzing 18 SWE-rebench tasks executed by two models (Claude Code with Haiku and a local Qwen-based agent). Our findings reveal dramatic resource dynamics: in a single ML task, memory usage changed by 2.9GB within one second; across all tasks, peak memory requirements ranged from 197MB to 4GB, yielding a coefficient of variation (CV) of 147\%. Furthermore, the same tasks exhibited 3.9$\times$ CPU utilization differences between the two agents, demonstrating that resource demands depend not only on the task but also on the agent architecture.
+AI coding agents---systems that combine large language models with autonomous tool use to solve software engineering tasks---are rapidly moving from research prototypes to production deployments. Frameworks such as Claude Code~\cite{claude-code}, OpenHands~\cite{openhands}, and SWE-agent~\cite{swe-agent} execute iterative loops of LLM reasoning and tool calls (compilers, test runners, package managers) inside sandboxed containers. As cloud providers begin hosting dozens of concurrent agent instances on shared infrastructure, efficient resource management becomes critical. Yet we lack a systematic understanding of how these workloads actually consume resources.
 
-These measurements expose two fundamental mismatches between existing resource controls and agent workloads:
+To fill this gap, we conducted the first characterization of resource usage in production AI coding agents, analyzing 144 SWE-rebench~\cite{swe-rebench} tasks executed by two models---Haiku (cloud API) and GLM (local GPU)---within the same agent framework. Our measurements reveal a striking finding: \textbf{LLM reasoning accounts for only 26--44\% of end-to-end task latency}. Tool execution consumes approximately 40\% of agent active time and drives 98.5\% of all memory bursts, while container startup adds a further 29--45\% overhead. In other words, OS-level resource management directly affects more than half of the user-perceived task completion time.
 
-\textbf{Domain mismatch.} Current controls set static resource limits at coarse-grained container or sandbox boundaries. However, agent workloads execute rapid sequences of tool calls with varying resource profiles---our data shows resource requirements varying by up to 147\% across task categories. Each tool call requires fine-grained resource governance, and transitions between phases require dynamic, phase-aware policies rather than fixed budgets. Static limits set to peak requirements waste 76--93\% of allocated CPU during normal operation.
+Moreover, agent workloads differ fundamentally from traditional cloud workloads in ways that render existing resource controls ineffective. Our analysis reveals three gaps:
 
-\textbf{Timescale mismatch.} User-space controllers typically operate at 10--100ms timescales, but our measurements show memory changes of up to 3GB and CPU changes exceeding 50\% within single-second sampling intervals. By the time a user-space controller observes pressure and adjusts limits, interference has already formed.
+\textbf{Granularity gap.} Resource demands vary at tool-call granularity---memory peak-to-average ratio reaches 15.4$\times$, and different Bash commands differ by 13.7$\times$ in memory consumption---but existing controls (cgroup limits, Kubernetes QoS) set a single static policy at container level. Static limits set to peak waste 91--93\% of allocated resources; limits set to average trigger OOM kills during 1--2 second tool bursts, destroying all accumulated LLM context.
 
-We present \sys, an eBPF-based resource controller that addresses both mismatches. \sys uses eBPF (sched\_ext for CPU scheduling, memcg\_bpf\_ops for memory throttling) to execute control logic at kernel enforcement points, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands.
+\textbf{Timescale gap.} Memory bursts last only 1--2 seconds with change rates reaching several GB/s, yet user-space controllers (systemd-oomd, Kubernetes VPA) operate at tens-of-milliseconds to minutes timescales. By the time a user-space controller observes pressure and adjusts limits, the burst has already passed or caused interference.
 
-Key contributions:
+\textbf{Predictability gap.} Agent workloads are inherently non-deterministic: the same task produces 1.8$\times$ execution time variance across runs, output token count has near-zero correlation with peak memory (r\,=\,$-$0.14), and resource profiles change drastically with the underlying model (1.7$\times$ CPU difference between Haiku and GLM on identical tasks). History-based prediction methods---moving averages, percentile recommendations, Autopilot~\cite{rzadca2020autopilot}---cannot reliably forecast resource needs.
+
+We present \sys, an eBPF-based resource controller designed to close these three gaps. \sys organizes resources using hierarchical cgroup v2 structures aligned with tool-call boundaries, executes control logic at kernel enforcement points via sched\_ext~\cite{sched-ext} and memcg\_bpf\_ops~\cite{memcg-bpf} for microsecond-level reaction, and supports runtime-adaptive policies driven by real-time observation rather than historical prediction.
+
+\noindent Our contributions are:
 \begin{itemize}
-	\item \textbf{Characterization:} First systematic measurement study of resource usage patterns in production AI coding agents, quantifying the severity of domain and timescale mismatches (memory changes up to 3GB/second, resource requirement CV of 147\%, 3.9$\times$ CPU difference between agents).
-	\item \textbf{System design:} \sys, an eBPF-based resource controller using sched\_ext and memcg\_bpf\_ops to execute dynamic, phase-aware policies at kernel enforcement points with microsecond-level reaction.
-	\item \textbf{Evaluation:} Comprehensive evaluation on SWE-rebench tasks demonstrating improved multi-tenant isolation and significant reduction in resource waste.
+	\item \textbf{Characterization.} The first systematic measurement of resource usage in production AI coding agents (144 tasks, 2 models), revealing that tool execution drives 98.5\% of memory bursts and OS-level management affects over half of task latency (\S\ref{sec:characterization}).
+	\item \textbf{Gap analysis.} A quantitative comparison with serverless, microservice, and batch workloads, identifying the granularity, timescale, and predictability gaps that render existing resource controls ineffective (\S\ref{sec:gap}).
+	\item \textbf{System.} \sys, an eBPF-based resource controller with hierarchical cgroup domains, in-kernel enforcement, and runtime-adaptive policies, with preliminary evaluation demonstrating improved isolation and reduced waste (\S\ref{sec:design}, \S\ref{sec:eval}).
 \end{itemize}
 
 \section{Background}
@@ -140,6 +144,7 @@ Key contributions:
 \textbf{eBPF} enables Linux to address the tension between standardized interfaces and dynamic workloads by introducing programmable enforcement points, providing a safe and dynamically loadable mechanism for executing control logic inside the kernel~\cite{ebpf-verifier}. On the CPU side, \texttt{sched\_ext} allows scheduling policies to be defined by BPF programs with fail-safe reversion to default behavior on errors~\cite{sched-ext}. On the memory side, \texttt{memcg\_bpf\_ops} introduces hooks such as \texttt{get\_high\_delay\_ms} for custom throttle delays on \texttt{memory.high} breaches~\cite{memcg-bpf}. These primitives enable in-kernel enforcement with microsecond-level reaction times.
 
 \section{Characterization}
+\label{sec:characterization}
 
 We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, aiming to answer the following research questions: \textbf{RQ1}: What is the execution model of agents? \textbf{RQ2}: What are the characteristics of resource usage in agent workloads? We also discuss the fundamental differences between AI coding agent resource usage patterns and traditional containerized workloads, and the impact of these differences on the applicability and efficiency of existing resource management tools.
 
@@ -157,7 +162,10 @@ We conducted the first systematic measurement study of resource usage patterns i
 
 The execution process of agents differs fundamentally from traditional containerized workloads. Unlike serverless/FaaS processing short-lived stateless requests (100ms--2s), each agent task runs for approximately 10 minutes on average (GLM average 10.8 minutes, Haiku average 5.8 minutes, median 8.1 minutes; see Fig-exec (a)) and executes stateful multi-round reasoning and tool call loops. Additionally, container startup has non-negligible fixed overhead, averaging 26.5 seconds (median 23.0 seconds), with a maximum of 97 seconds.
 
-\textbf{Approximately 60\% time for reasoning, 40\% for tool execution, but huge task variation (0\%--86\%).} Agent execution consists of alternating LLM reasoning and tool call phases. As shown in Fig-exec (b), across all 144 tasks (Haiku 33 + GLM 111), using \texttt{active\_time} (time span from trace first to last record, excluding container startup overhead) as denominator, tool execution time median is about 35\% (Haiku 34.7\%, GLM 36.5\%), with means of Haiku 42.5\% and GLM 36.4\%. The medians of both models are close, indicating that the phase division of approximately 60\% time for LLM thinking and 40\% time for tool execution is a common feature of agent workloads. However, this ratio varies dramatically between tasks, ranging from 0\% to 86\% (median ~36\%), as shown in Fig-tool-time (a).
+\textbf{Approximately 60\% time for reasoning, 40\% for tool execution, but huge task variation (0\%--86\%).} Agent execution consists of alternating LLM reasoning and tool call phases. As shown in Fig-exec (b), across all 144 tasks (Haiku 33 + GLM 111), using \texttt{active\_time} (time span from trace first to last record, excluding container startup overhead) as denominator, tool execution time median is about 35\% (Haiku 34.7\%, GLM 36.5\%), with means of Haiku 42.5\% and GLM 36.4\%. The medians of both models are close, indicating that the phase division of approximately 60\% time for LLM thinking and 40\% time for tool execution is a common feature of agent workloads. However, this ratio varies dramatically between tasks, ranging from 0\% to 86\% (median ~36\%), as shown in Fig-tool-time (a). 
+
+\textbf{LLM reasoning accounts for only 26--44\% of end-to-end latency; the remainder is infrastructure overhead.} Analyzing end-to-end task latency using \texttt{claude\_time} (full container lifecycle) as the denominator: container startup overhead accounts for 31--48\% (Haiku 47.7\%, GLM 31.0\%), tool execution accounts for approximately 26\% (consistent across both models: Haiku 25.9\%, GLM 25.5\%), and actual LLM reasoning accounts for only 26\% (Haiku) to 44\% (GLM). In other words, infrastructure overhead (container startup + tool execution) consumes 57--74\% of end-to-end latency. This finding demonstrates that OS-level container and resource management directly affects more than half of agent task latency---optimizing resource control during tool execution is not merely a matter of resource efficiency, but directly impacts user-perceived task completion time.
+
 
 \begin{figure}[t]
 	\centering
@@ -261,6 +269,7 @@ Haiku and GLM show significant CPU utilization difference on same tasks (Haiku a
 \textbf{Simply changing underlying model produces completely different resource profile.} This CPU utilization difference reflects the essential issue: even with identical agent framework (both Claude Code), simply changing underlying model produces completely different resource profile. Haiku performs inference via cloud API, API calls, response parsing, and context management consume more local CPU; GLM's inference executes on local GPU, CPU load in container almost entirely from tool calls---GLM container has only 0.5\% of sampling points with CPU utilization exceeding 50\%, while Haiku reaches 8.2\%. Even executing same task, CPU distribution, execution duration, and memory trajectories of both models differ significantly. This means resource management strategies cannot make static assumptions based on single category of ``agent workloads'', must adapt to resource profile differences brought by different models.
 
 \section{Gap Analysis}
+\label{sec:gap}
 
 The measurements in the previous two sections reveal unique resource characteristics of agent workloads. This section places these characteristics within the coordinate system of known cloud workloads for quantitative comparison, and systematically analyzes why existing resource management solutions---from kernel cgroup interfaces to cluster-level autoscaling---cannot effectively manage agent workloads.
 
@@ -327,6 +336,7 @@ Based on RQ1 (execution model), RQ2 (resource characteristics), and gap analysis
 These three design requirements---kernel path execution (R1), tool call granularity (R2), runtime adaptability (R3)---jointly define a design space existing solutions cannot cover. AgentCgroup is system design oriented toward this space, which we will introduce in detail in next section.
 
 \section{Design and Implementation}
+\label{sec:design}
 
 \subsection{Overview}
 
@@ -357,6 +367,7 @@ On memory, \sys uses \texttt{memcg\_bpf\_ops} hooks~\cite{memcg-bpf} to implemen
 A user-space daemon provides APIs to manage cgroup subtrees and subscribes to events. The daemon updates shared BPF maps that parameterize policy functions. For portability, \sys uses libbpf and BPF CO-RE~\cite{libbpf}.
 
 \section{Evaluation}
+\label{sec:eval}
 
 Our evaluation is designed to answer three systems questions: (i) does \sys improve isolation and tail latency for multi-tenant agent workloads, (ii) does eBPF-based in-kernel enforcement provide benefits that static knobs and user-space control cannot match, and (iii) what is the overhead and operational risk of deploying such policies.
 
