@@ -284,7 +284,7 @@ This unpredictability is compounded by agents' in-process statefulness: an OOM k
 
 In summary, control granularity is mismatched with tool-call-level dynamics, responsiveness is mismatched with sub-second unpredictable bursts, and adaptability is mismatched with non-deterministic stateful execution. \sys is designed to close these three mismatches.
 
-\section{Design and Implementation}
+\section{\sys Design and Implementation}
 \label{sec:design}
 
 \subsection{Overview}
@@ -318,27 +318,27 @@ A user-space daemon provides APIs to manage cgroup subtrees and subscribes to ev
 \section{Preliminary Evaluation}
 \label{sec:eval}
 
-Our evaluation is designed to answer three systems questions: (i) does \sys improve isolation and tail latency for multi-tenant agent workloads, (ii) does eBPF-based in-kernel enforcement provide benefits that static knobs and user-space control cannot match, and (iii) what is the overhead and operational risk of deploying such policies.
+We evaluate \sys by replaying real agent memory traces from \S\ref{sec:characterization} at accelerated speed in a multi-tenant setting with memcg BPF struct\_ops enforcement. No application code is modified; isolation is achieved entirely through cgroup boundaries and BPF hooks.
 
-\subsection{Methodology}
+\textbf{Setup.} Three agent traces run concurrently in separate cgroups: dask/dask\#11628 as the HIGH-priority session (peak 421\,MB) and two instances of sigmavirus24/github3.py\#673 as LOW-priority sessions (peak 406\,MB each). Under BPF, LOW cgroups are throttled via \texttt{get\_high\_delay\_ms} when the HIGH cgroup experiences memory pressure; the HIGH cgroup is protected via \texttt{below\_low}. We compare against a no-isolation baseline across three memory pressure levels (Table~\ref{tab:eval}).
 
-We evaluate \sys on representative agent workloads drawn from common agent sandboxes: a code-oriented workload with compiler/test bursts, a data-analysis workload with working-set swings and memory-intensive operations, and a web/tool workload with mixed CPU and I/O phases. The workloads are executed in a multi-tenant configuration where multiple agent workloads share the same host and contend for CPU and memory. We instrument each workload and tool-call cgroup to collect memory events and scheduler statistics.
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Metric} & \textbf{No Isol.} & \textbf{BPF} & \textbf{Improv.} \\
+\hline
+OOM survival (1100\,MB) & 66\% & 100\% & +50\% \\
+Priority ratio (2560\,MB) & 0.87$\times$ & 7.40$\times$ & +748\% \\
+HIGH P95 latency (1300\,MB) & 70.97\,ms & 50.14\,ms & $-$29\% \\
+\hline
+\end{tabular}
+\caption{Multi-tenant isolation with real agent trace replay across three memory pressure scenarios.}
+\label{tab:eval}
+\end{table}
 
-Baselines isolate the benefit of in-kernel enforcement: (1)~static cgroup~v2 knobs with fixed \texttt{cpu.max}, \texttt{memory.high}, and \texttt{memory\allowbreak.max}; (2)~a user-space controller similar to TMO's Senpai~\cite{tmo} that monitors pressure and rewrites cgroup files. We also ablate \sys by disabling eBPF enforcement to isolate the contribution of in-kernel execution.
-
-Metrics include tail latency (p95/p99), workload completion rate, interference amplification under noisy neighbors, and resource utilization. We use \texttt{memory.events} to distinguish controlled throttling from hard failures~\cite{cgroupv2}.
-
-\subsection{Isolation, Latency, and Efficiency}
-
-We measure isolation by comparing tail latency violations across configurations under noisy-neighbor scenarios. For latency, we compare policy reaction time between in-kernel enforcement and user-space monitoring. For efficiency, we compare throughput and memory footprint against static over-provisioning.
-
-\subsection{Robustness and Fail-Safe Evaluation}
-
-Robustness is evaluated under adversarial scenarios: CPU spinning loops, fork storms, and memory blow-ups. We test whether containment remains scoped to the correct workload subtree and whether \texttt{cgroup.kill} handles concurrent forks correctly~\cite{cgroupv2}. We also verify that \texttt{memory.oom.group} ensures atomic OOM termination within workload boundaries~\cite{cgroupv2}.
-
-\subsection{Overhead Analysis}
-
-We measure eBPF verification cost, per-operation overhead on scheduling and memory paths, and BPF map memory overhead. We validate \texttt{sched\_ext}'s fail-safe reversion by injecting scheduler errors~\cite{sched-ext}.
+\textbf{Results.} Under tight memory (1100\,MB total for ${\sim}$1233\,MB combined demand), the baseline OOM-kills one LOW process (66\% survival); BPF allows all processes to complete (100\%) by throttling LOW allocations (239 delay triggers) while HIGH finishes with only +2.8\% overhead. Under moderate memory (2560\,MB), BPF improves the priority ratio from 0.87$\times$ to 7.40$\times$: LOW processes are throttled to 79.6\,s while HIGH completes in 6.5\,s, with 19,578 memory.high triggers and 1,556 BPF delay activations. BPF also reduces HIGH P95 allocation latency by 29\% (70.97$\to$50.14\,ms) through reduced contention. Enforcement overhead is negligible: P50 latency increases by 0.3\% and total completion time decreases by 1.1\%.
 
 \section{Conclusion}
 
