@@ -287,58 +287,29 @@ In summary, control granularity is mismatched with tool-call-level dynamics, res
 \section{\sys Design and Implementation}
 \label{sec:design}
 
-\subsection{Overview}
+\sys closes the three mismatches identified in \S\ref{sec:gap}: fine-grained resource domains match tool-call-level dynamics, in-kernel eBPF enforcement reacts at microsecond timescales, and runtime-adaptive policies replace historical prediction with graceful degradation.
 
-\sys is designed around three goals derived from the three mismatches identified in \S\ref{sec:gap}:
+\textbf{Fine-grained resource domains.} The granularity mismatch (\S\ref{sec:gap}) arises because existing controls set a single policy per container, while agent demands vary per tool call. \sys organizes resources using a hierarchical cgroup v2 structure where each agent workload maps to a cgroup node with tool calls as child nodes, enabling per-tool-call resource constraints while maintaining overall workload budgets. For recovery, \sys uses cgroup v2 lifecycle primitives: freezing subtrees when tool calls exceed soft limits, and atomically killing subtrees when termination is necessary.
 
-\begin{itemize}
-	\item \textbf{Fine-grained resource alignment} (granularity mismatch): Resource domains align with tool-call boundaries, adapting to phase transitions rather than static limits.
-	\item \textbf{Microsecond-level responsiveness} (responsiveness mismatch): Control logic reacts to resource pressure at sub-millisecond timescales, before interference forms.
-	\item \textbf{Runtime adaptability} (adaptability mismatch): Policies adjust based on real-time observation rather than historical prediction, with graceful degradation instead of termination, eBPF verification~\cite{ebpf-verifier} and fail-safe reversion~\cite{sched-ext}.
-\end{itemize}
+\textbf{In-kernel enforcement.} The responsiveness mismatch (\S\ref{sec:gap}) arises because user-space controllers react at millisecond-to-minute timescales, while agent bursts last 1--2 seconds with unpredictable timing. \sys executes control logic directly at kernel cgroup enforcement points via eBPF with the toolcall cgroup, enabling microsecond-level reaction without user-kernel round trips. On CPU, \texttt{sched\_ext}~\cite{sched-ext} maintains per-workload and per-tool-call metadata in BPF maps, prioritizing latency-sensitive tool calls with automatic fail-safe reversion on errors. On memory, \texttt{memcg\_bpf\_ops} hooks~\cite{memcg-bpf} implement custom throttling delays when a cgroup breaches its soft limit (\texttt{memory.high}), with \texttt{memory.max} as the hard limit~\cite{cgroupv2}.
 
-\sys achieves these goals through two complementary mechanisms: a hierarchical cgroup structure that organizes resources around agent workloads and tool calls, and eBPF-based enforcement that executes control logic at kernel enforcement points.
-
-\subsection{Dynamic Resource Domains}
-
-\sys organizes resources using a hierarchical cgroup v2 structure. Each agent workload maps to a cgroup node, with tool calls as child nodes. This enables per-tool-call resource constraints while maintaining overall workload budgets.
-
-For recovery, \sys uses cgroup v2 lifecycle primitives. When a tool call exceeds soft limits, \sys freezes the subtree to allow adaptation. When termination is necessary, \sys kills the subtree atomically.
-
-\subsection{In-Kernel Enforcement via eBPF}
-
-\sys uses eBPF to execute control logic directly at kernel enforcement points, enabling microsecond-level reaction without user-kernel round trips.
-
-On CPU scheduling, \sys uses \texttt{sched\_ext}, which exposes a full scheduling interface to BPF programs~\cite{sched-ext}. The BPF scheduler maintains per-workload and per-tool-call metadata in BPF maps, prioritizing latency-sensitive tool calls and enforcing fairness. The scheduler automatically reverts to the fair-class scheduler on errors.
-
-On memory, \sys uses \texttt{memcg\_bpf\_ops} hooks~\cite{memcg-bpf} to implement custom throttling delays when a cgroup breaches its soft limit (\texttt{memory.high}), with \texttt{memory.max} as the hard limit~\cite{cgroupv2}.
-
-A user-space daemon provides APIs to manage cgroup subtrees and subscribes to events. The daemon updates shared BPF maps that parameterize policy functions. For portability, \sys uses libbpf and BPF CO-RE~\cite{libbpf}.
+\textbf{Runtime-adaptive policies with graceful degradation.} The adaptability mismatch (\S\ref{sec:gap}) arises because history-based prediction fails for non-deterministic agent workloads, and kill-restart destroys accumulated LLM context. \sys uses eBPF to trace process creation and memory allocation changes in-kernel, detecting tool-call boundaries and resource dynamics in real time without user-space polling. When memory pressure rises, the BPF program applies graduated responses (throttling via \texttt{memory.high} delays, freezing via \texttt{cgroup.freeze}) rather than termination, preserving agent state. A lightweight user-space daemon handles cgroup lifecycle management and policy configuration via shared BPF maps. For portability, \sys uses libbpf and BPF CO-RE~\cite{libbpf}, with eBPF verification~\cite{ebpf-verifier} ensuring safety.
 
 \section{Preliminary Evaluation}
 \label{sec:eval}
 
 We evaluate \sys by replaying real agent memory traces from \S\ref{sec:characterization} at accelerated speed in a multi-tenant setting with memcg BPF struct\_ops enforcement. No application code is modified; isolation is achieved entirely through cgroup boundaries and BPF hooks.
 
-\textbf{Setup.} Three agent traces run concurrently in separate cgroups: dask/dask\#11628 as the HIGH-priority session (peak 421\,MB) and two instances of sigmavirus24/github3.py\#673 as LOW-priority sessions (peak 406\,MB each). Under BPF, LOW cgroups are throttled via \texttt{get\_high\_delay\_ms} when the HIGH cgroup experiences memory pressure; the HIGH cgroup is protected via \texttt{below\_low}. We compare against a no-isolation baseline across three memory pressure levels (Table~\ref{tab:eval}).
+\textbf{Setup.} Three agent traces run concurrently in separate cgroups: dask/dask\#11628 as the HIGH-priority session (peak 421\,MB) and two instances of sigmavirus24/github3.py\#673 as LOW-priority sessions (peak 406\,MB each). Under BPF, LOW cgroups are throttled via \texttt{get\_high\_delay\_ms} when the HIGH cgroup experiences memory pressure; the HIGH cgroup is protected via \texttt{below\_low}. We compare against a no-isolation baseline under two memory pressure scenarios (Fig.~\ref{fig:eval}).
 
-\begin{table}[t]
+\begin{figure}[t]
 \centering
-\small
-\begin{tabular}{lccc}
-\hline
-\textbf{Metric} & \textbf{No Isol.} & \textbf{BPF} & \textbf{Improv.} \\
-\hline
-OOM survival (1100\,MB) & 66\% & 100\% & +50\% \\
-Priority ratio (2560\,MB) & 0.87$\times$ & 7.40$\times$ & +748\% \\
-HIGH P95 latency (1300\,MB) & 70.97\,ms & 50.14\,ms & $-$29\% \\
-\hline
-\end{tabular}
-\caption{Multi-tenant isolation with real agent trace replay across three memory pressure scenarios.}
-\label{tab:eval}
-\end{table}
+\includegraphics[width=\columnwidth]{eval_results}
+\caption{BPF enforcement evaluation with real agent trace replay. (a)~OOM survival rate under tight memory (1100\,MB total for ${\sim}$1233\,MB demand). (b)~HIGH-priority P95 allocation latency under moderate memory (1300\,MB).}
+\label{fig:eval}
+\end{figure}
 
-\textbf{Results.} Under tight memory (1100\,MB total for ${\sim}$1233\,MB combined demand), the baseline OOM-kills one LOW process (66\% survival); BPF allows all processes to complete (100\%) by throttling LOW allocations (239 delay triggers) while HIGH finishes with only +2.8\% overhead. Under moderate memory (2560\,MB), BPF improves the priority ratio from 0.87$\times$ to 7.40$\times$: LOW processes are throttled to 79.6\,s while HIGH completes in 6.5\,s, with 19,578 memory.high triggers and 1,556 BPF delay activations. BPF also reduces HIGH P95 allocation latency by 29\% (70.97$\to$50.14\,ms) through reduced contention. Enforcement overhead is negligible: P50 latency increases by 0.3\% and total completion time decreases by 1.1\%.
+\textbf{Results.} Under tight memory (1100\,MB total for ${\sim}$1233\,MB combined demand), the baseline OOM-kills one LOW process (66\% survival); BPF allows all processes to complete (100\%) by throttling LOW allocations (239 delay triggers) while HIGH finishes with only +2.8\% overhead (Fig.~\ref{fig:eval}(a)). BPF also reduces HIGH-priority P95 allocation latency by 29\% (70.97$\to$50.14\,ms) through reduced memory contention (Fig.~\ref{fig:eval}(b)). Enforcement overhead is negligible: P50 latency increases by 0.3\% and total completion time decreases by 1.1\%.
 
 \section{Conclusion}
 
