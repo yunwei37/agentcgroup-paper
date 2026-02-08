@@ -9,7 +9,7 @@
 \PassOptionsToPackage{disable}{microtype}
 
 %% Disable ACM-specific requirements for draft
-\settopmatter{printacmref=false}
+\settopmatter{printacmref=false,authorsperrow=3}
 \renewcommand\footnotetextcopyrightpermission[1]{}
 
 %% System name macro
@@ -18,6 +18,9 @@
 
 %% Graphics support
 \usepackage{graphicx}
+
+%% Allow slightly looser line breaking to avoid overfull hboxes in two-column
+\emergencystretch=1.5em
 \graphicspath{{docs/img/}}
 
 %%
@@ -39,50 +42,27 @@
 % \email{anonymous@example.com}
 
 \author{Yusheng Zheng}
-\affiliation{%
-	\institution{University of California, Santa Cruz}
-	\country{USA}
-}
+\affiliation{\institution{UC Santa Cruz}\country{}}
 \email{yzhen165@ucsc.edu}
 
-
 \author{Jiakun Fan}
-\affiliation{%
-  \institution{Virginia Tech}
-  \city{Blacksburg}
-  \state{VA}
-  \country{USA}
-}
+\affiliation{\institution{Virginia Tech}\country{}}
 \email{jiakunfan@vt.edu}
 
 \author{Quanzhi Fu}
-\affiliation{%
-  \institution{Virginia Tech}
-  \city{Blacksburg}
-  \state{VA}
-  \country{USA}
-}
+\affiliation{\institution{Virginia Tech}\country{}}
 \email{quanzhif@vt.edu}
 
 \author{Yiwei Yang}
-\affiliation{%
-	\institution{University of California, Santa Cruz}
-	\country{USA}
-}
+\affiliation{\institution{UC Santa Cruz}\country{}}
 \email{yyang363@ucsc.edu}
 
 \author{Wei Zhang}
-\affiliation{%
-  \institution{University of Connecticut}
-  \country{USA}
-}
+\affiliation{\institution{UConn}\country{}}
 \email{wei.zhang@uconn.edu}
 
 \author{Andi Quinn}
-\affiliation{%
-  \institution{University of California, Santa Cruz}
-  \country{USA}
-}
+\affiliation{\institution{UC Santa Cruz}\country{}}
 \email{aquinn1@ucsc.edu}
 
 
@@ -124,7 +104,7 @@ Moreover, agent workloads differ fundamentally from traditional cloud workloads 
 
 \textbf{Timescale gap.} Memory bursts last only 1--2 seconds with change rates reaching several GB/s, yet user-space controllers (systemd-oomd, Kubernetes VPA) operate at tens-of-milliseconds to minutes timescales. By the time a user-space controller observes pressure and adjusts limits, the burst has already passed or caused interference.
 
-\textbf{Predictability gap.} Agent workloads are inherently non-deterministic: the same task produces 1.8$\times$ execution time variance across runs, output token count has near-zero correlation with peak memory (r\,=\,$-$0.14), and resource profiles change drastically with the underlying model (1.7$\times$ CPU difference between Haiku and GLM on identical tasks). History-based prediction methods (moving averages, percentile recommendations, Autopilot~\cite{rzadca2020autopilot}) cannot reliably forecast resource needs.
+\textbf{Predictability gap.} Agent workloads are inherently non-deterministic: the same task produces 1.8$\times$ execution time variance across runs, and resource profiles change with the underlying model (1.7$\times$ CPU difference between Haiku and GLM). History-based prediction (moving averages, percentile recommendations, Autopilot~\cite{rzadca2020autopilot}) cannot reliably forecast resource needs.
 
 We present \sys, an eBPF-based resource controller designed to close these three gaps. \sys organizes resources using hierarchical cgroup v2 structures aligned with tool-call boundaries, executes control logic at kernel enforcement points via sched\_ext~\cite{sched-ext} and memcg\_bpf\_ops~\cite{memcg-bpf} for microsecond-level reaction, and supports runtime-adaptive policies driven by real-time observation rather than historical prediction.
 
@@ -139,7 +119,7 @@ We present \sys, an eBPF-based resource controller designed to close these three
 
 \textbf{AI Coding Agents.} Modern AI coding agents combine large language models (LLMs) with tool-use capabilities to autonomously solve software engineering tasks. These agents operate in an iterative loop: the LLM reasons about the current state, selects a tool (e.g., file read, code edit, shell command, test execution), executes the tool in a sandboxed environment, observes the result, and repeats until the task is complete. Representative agents include Claude Code~\cite{claude-code}, OpenHands~\cite{openhands}, and SWE-agent~\cite{swe-agent}. Each tool invocation spawns distinct processes with varying resource profiles; for example, a compiler may consume gigabytes of memory, while a simple file read uses minimal resources. This creates highly dynamic, phase-varying workloads that challenge traditional resource management approaches.
 
-\textbf{Linux cgroup} provides a hierarchical resource governance abstraction where the kernel organizes tasks into a tree of control groups and applies controller-specific accounting and enforcement along that hierarchy~\cite{cgroupv2}. The memory controller exposes two key boundaries: \texttt{memory.high} as a soft throttle point that triggers reclaim pressure without invoking the OOM killer, and \texttt{memory.max} as a hard limit that triggers OOM when exceeded. Cgroup v2 also provides lifecycle controls relevant to agent execution: \texttt{cgroup.freeze} stops all processes in a subtree until explicitly unfrozen, \texttt{cgroup.kill} terminates all processes while handling concurrent forks, and \texttt{memory.oom.group} ensures OOM kills the entire cgroup atomically to avoid partial failures.
+\textbf{Linux cgroup} provides a hierarchical resource governance abstraction where the kernel organizes tasks into a tree of control groups and applies controller-specific accounting and enforcement along that hierarchy~\cite{cgroupv2}. The memory controller exposes two key boundaries: \texttt{memory\allowbreak.high} as a soft throttle point that triggers reclaim pressure without invoking the OOM killer, and \texttt{memory\allowbreak.max} as a hard limit that triggers OOM when exceeded. Cgroup~v2 also provides lifecycle controls: \texttt{cgroup\allowbreak.freeze} stops all processes in a subtree until unfrozen, \texttt{cgroup\allowbreak.kill} terminates all processes while handling concurrent forks, and \texttt{memory.oom\allowbreak.group} ensures atomic OOM termination to avoid partial failures.
 
 \textbf{eBPF} enables Linux to address the tension between standardized interfaces and dynamic workloads by introducing programmable enforcement points, providing a safe and dynamically loadable mechanism for executing control logic inside the kernel~\cite{ebpf-verifier}. On the CPU side, \texttt{sched\_ext} allows scheduling policies to be defined by BPF programs with fail-safe reversion to default behavior on errors~\cite{sched-ext}. On the memory side, \texttt{memcg\_bpf\_ops} introduces hooks such as \texttt{get\_high\_delay\_ms} for custom throttle delays on \texttt{memory.high} breaches~\cite{memcg-bpf}. These primitives enable in-kernel enforcement with microsecond-level reaction times.
 
@@ -150,7 +130,7 @@ We conducted the first systematic measurement study of resource usage patterns i
 
 \subsection{Experimental Setup}
 
-\textbf{Experimental Platform.} All experiments run on a machine equipped with an Intel Core Ultra 9 285K processor (24 cores, up to 5.8\,GHz), 128\,GB DDR5 RAM, running Ubuntu 24.04.3 LTS with Linux kernel 6.15.11 (cgroup v2 enabled). Each task executes in an isolated Podman container using the official SWE-rebench Docker images (single image size 2.9--17.3\,GB). No resource limits are applied during characterization experiments to ensure measurements reflect unconstrained resource demand.
+\textbf{Experimental Platform.} All experiments run on a machine with an Intel Core Ultra 9 285K (24 cores, 5.8\,GHz), 128\,GB DDR5 RAM, Ubuntu 24.04 with Linux 6.15.11 (cgroup v2). Each task executes in an isolated Podman container using official SWE-rebench images (2.9--17.3\,GB each). No resource limits are applied to ensure measurements reflect unconstrained demand.
 
 \textbf{Dataset.} We adopt a two-level dataset strategy. First, we collect 111 tasks (GLM local model) and 33 tasks (Haiku cloud model) from the SWE-rebench dataset for large-scale statistical analysis. Additionally, we select 18 representative tasks covering six categories (CLI\_Tools, DevOps\_Build, ML\_Scientific, Medical\_Bio, SQL\_Data, Web\_Network) and three difficulty levels (Easy, Medium, Hard) for category-level analysis. These tasks cover typical use cases for AI coding agents, including command-line tool fixes, build system configuration, machine learning code debugging, biomedical data processing, database query optimization, and web service fixes.
 
@@ -246,11 +226,11 @@ As shown in Fig-change-rate, we observed maximum memory change rate reaching 3GB
 	\label{fig:change_rate}
 \end{figure}
 
-\textbf{Resource bursts last only 1--2 seconds with peak-to-average ratio up to 15.4$\times$, making static limits ineffective.} Resource bursts are short-lived (spikes shown in Fig-timeseries-haiku and Fig-timeseries-glm). Among 18 representative tasks, the Medical\_Bio\_Hard task has peak memory of 4060\,MB while average memory is only 264\,MB, an overprovisioning factor of 15.4$\times$. This 4\,GB peak lasts only about 1--2 seconds before falling back to the 230\,MB baseline. This spike pattern means that static limits set to peak waste resources 98\% of the time, while limits set to average trigger OOM kills during 1--2 second tool bursts. Traditional reactive resource adjustment cannot cope with such short-lived bursts.
+\textbf{Resource bursts last 1--2 seconds with peak-to-average ratio up to 15.4$\times$, making static limits ineffective.} Resource bursts are short-lived (spikes shown in Fig-timeseries-haiku and Fig-timeseries-glm). Among 18 representative tasks, the Medical\_Bio\_Hard task has peak memory of 4060\,MB while average memory is only 264\,MB, an overprovisioning factor of 15.4$\times$. This 4\,GB peak lasts only about 1--2 seconds before falling back to the 230\,MB baseline. This spike pattern means that static limits set to peak waste resources 98\% of the time, while limits set to average trigger OOM kills during 1--2 second tool bursts. Traditional reactive resource adjustment cannot cope with such short-lived bursts.
 
-\textbf{CPU and memory correlation varies by task (-0.84 to +0.50), cannot assume co-directional change.} As shown in Fig-timeseries-haiku and Fig-timeseries-glm, correlation between CPU and memory usage shows significant task dependency. Average correlation coefficient across all tasks is -0.39 (ranging from -0.84 to +0.50), indicating CPU peaks and memory peaks do not appear synchronously in most tasks. Some tasks show positive correlation (tool execution phases pull up both CPU and memory), others show negative correlation (CPU-intensive phases have lower memory demand, and vice versa). This task-dependent coupling pattern is harder to cope with than simple positive/negative correlation: resource control strategies cannot assume CPU and memory demands always change in same direction, must independently monitor and coordinate management of both resource dimensions.
+\textbf{CPU-memory correlation varies by task ($-$0.84 to $+$0.50); co-directional change cannot be assumed.} As shown in Fig-timeseries-haiku and Fig-timeseries-glm, correlation between CPU and memory usage shows significant task dependency. Average correlation coefficient across all tasks is -0.39 (ranging from -0.84 to +0.50), indicating CPU peaks and memory peaks do not appear synchronously in most tasks. Some tasks show positive correlation (tool execution phases pull up both CPU and memory), others show negative correlation (CPU-intensive phases have lower memory demand, and vice versa). This task-dependent coupling pattern is harder to cope with than simple positive/negative correlation: resource control strategies cannot assume CPU and memory demands always change in same direction, must independently monitor and coordinate management of both resource dimensions.
 
-Memory peaks concentrate in latter half of execution (mean/median about 65\% progress, see Fig-resource (b)), but distribution covers entire execution cycle, this unpredictability further increases difficulty of static resource allocation.
+Memory peaks concentrate in the latter half of execution (mean/median about 65\% progress, see Fig-resource~(b)), but the distribution covers the entire execution cycle, further increasing the difficulty of static resource allocation.
 
 \subsubsection{Non-determinism}
 
@@ -271,7 +251,7 @@ Haiku and GLM show significant CPU utilization difference on same tasks (Haiku a
 \section{Gap Analysis}
 \label{sec:gap}
 
-The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). We now analyze the three gaps these differences create in existing resource management, and why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
+The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). These differences create three gaps in existing resource management (Table~\ref{tab:gaps}): granularity, timescale, and predictability. We analyze each gap below, explaining why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
 
 \begin{table*}[t]
 	\centering
@@ -291,15 +271,31 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 	\label{tab:comparison}
 \end{table*}
 
+\begin{table}[t]
+	\centering
+	\small
+	\begin{tabular}{p{1.5cm}p{2.8cm}p{3.2cm}}
+		\hline
+		\textbf{Gap}          & \textbf{Agent Characteristic}                                           & \textbf{Why Existing Tools Fail}                                                            \\
+		\hline
+		Granularity           & Peak/avg 15.4$\times$; 185\,MB baseline + tool bursts                   & \texttt{memory.max/high}: single static threshold; K8s QoS: container-level policy           \\
+		Timescale             & 1--2\,s bursts; $\Delta$ up to GB/s                                     & PSI/oomd: ms-level user-space loop; VPA: minute-level resize                                 \\
+		Predictability        & 1.8$\times$ run variance; r\,=\,$-$0.14 token$\leftrightarrow$memory    & VPA/Autopilot: historical P95 invalid; 20$\times$ cross-task variation                       \\
+		\hline
+	\end{tabular}
+	\caption{Three resource management gaps and why existing mechanisms fail for agent workloads.}
+	\label{tab:gaps}
+\end{table}
+
 \subsection{Granularity Gap}
 
 Agent resource demands vary at tool-call granularity, but all existing controls set a single policy at container level. The memory peak-to-average ratio illustrates this most clearly: Azure Functions exhibit near-flat memory~\cite{shahrad2020serverless}, Azure VMs stay within 2--3$\times$~\cite{cortez2017resource}, and Google Autopilot recommends within 2$\times$ of actual peaks~\cite{rzadca2020autopilot}, whereas agent workloads reach 15.4$\times$.
 
-Cgroup v2 hard limits (\texttt{memory.max}) trigger OOM kill synchronously in the page allocation path. For traditional workloads with peak/avg ratio 2--3$\times$, setting limits to peak causes 50--67\% overprovisioning, usually acceptable. But with agent peak/avg of 15.4$\times$, setting to peak (4060\,MB) wastes 93\% of allocated memory, while setting to average triggers OOM kills during 1--2 second tool bursts, destroying all accumulated agent state. Across all 144 tasks, CPU overprovisioning by peak allocation reaches 11.1$\times$--13.9$\times$. A static threshold fundamentally cannot express the ``low baseline + high burst'' two-layer structure. Soft limits (\texttt{memory.high}) avoid OOM kills through reclaim and throttling, which is effective for traditional workloads where reclaim targets file page cache without affecting correctness. However, agent workloads have two structural problems: reclaim cannot distinguish framework memory (Node.js heap, V8 JIT cache, ${\sim}$185\,MB, unreclaimable) from tool subprocess memory, and when it acts on framework pages it causes V8 GC pressure and JIT cache invalidation, extending LLM response parsing time; additionally, a single threshold at container granularity cannot differentiate \texttt{git status} (13.5\,MB average spike) from \texttt{pytest} (518\,MB P95 spike). Kubernetes QoS classes face the same limitation: Guaranteed allocation wastes 91--93\%, BestEffort is unsuitable for stateful agents, and Burstable with CFS bandwidth control (\texttt{cpu.max}) still operates at container granularity, unable to distinguish the LLM reasoning phase (near-zero CPU, low memory) from tool execution (multi-core burst, high memory) or set per-tool-call quotas. Agent CPU demand is bimodal (GLM: only 0.5\% of sampling points exceed 50\% utilization, yet tool execution peaks exceed 175\%), and a single bandwidth quota cannot adapt to both modes.
+Cgroup~v2 hard limits (\texttt{memory\allowbreak.max}) trigger OOM kill synchronously in the page allocation path. For traditional workloads with peak/avg ratio 2--3$\times$, setting limits to peak causes 50--67\% overprovisioning, usually acceptable. But with agent peak/avg of 15.4$\times$, setting to peak (4060\,MB) wastes 93\% of allocated memory, while setting to average triggers OOM kills during 1--2 second tool bursts, destroying all accumulated agent state. Across all 144 tasks, CPU overprovisioning by peak allocation reaches 11.1$\times$--13.9$\times$. A static threshold fundamentally cannot express the ``low baseline + high burst'' two-layer structure. Soft limits (\texttt{memory\allowbreak.high}) avoid OOM kills through reclaim and throttling, which is effective for traditional workloads where reclaim targets file page cache without affecting correctness. However, agent workloads have two structural problems: reclaim cannot distinguish framework memory (Node.js heap, V8 JIT cache, ${\sim}$185\,MB) from tool subprocess memory, and acting on framework pages causes V8 GC pressure and JIT cache invalidation that extends LLM response parsing time; additionally, a single threshold at container granularity cannot differentiate \texttt{git~status} (13.5\,MB average spike) from \texttt{pytest} (518\,MB P95 spike). Kubernetes QoS classes face the same limitation: Guaranteed allocation wastes 91--93\%, BestEffort is unsuitable for stateful agents, and Burstable with CFS bandwidth control (\texttt{cpu\allowbreak.max}) still operates at container granularity, unable to distinguish the LLM reasoning phase (near-zero CPU, low memory) from tool execution (multi-core burst, high memory) or set per-tool-call quotas. Agent CPU demand is bimodal (GLM: only 0.5\% of sampling points exceed 50\% utilization, yet tool execution peaks exceed 175\%), and a single bandwidth quota cannot adapt to both modes.
 
 \subsection{Timescale Gap}
 
-Agent resource bursts last only 1--2 seconds with change rates reaching several GB/s, a burst-silence pattern unlike the flat profiles of serverless functions, the diurnal cycles of microservices, or the steady ramps of batch jobs (Table~\ref{tab:comparison}). User-space controllers cannot react fast enough. PSI-driven solutions (systemd-oomd, Meta oomd) monitor cgroup Pressure Stall Information and take action (kill the cgroup or trigger swap) when pressure exceeds a threshold. Their design assumes (a) a sufficient time window for decision-making after the pressure signal appears, and (b) that kill or migration is an acceptable degradation path. Both assumptions fail for agents: the full cycle from PSI signal generation to user-space daemon reception, decision, and cgroup control file write takes tens of milliseconds, by which time a 1--2 second burst (with change rates of 3\,GB/s) has already passed or triggered kernel intervention. More fundamentally, PSI is a container-level aggregate that cannot attribute pressure to specific tool calls; it reports ``container has pressure'' but not ``pytest caused pressure.'' Kubernetes VPA adjusts resources at Pod restart level (stable) or minute-level in-place resize (alpha feature), orders of magnitude slower than second-scale tool bursts, making within-execution adjustment impossible.
+Agent resource bursts last only 1--2 seconds with change rates reaching several GB/s, a burst-silence pattern unlike the flat profiles of serverless functions, the diurnal cycles of microservices, or the steady ramps of batch jobs (Table~\ref{tab:comparison}). User-space controllers cannot react fast enough. PSI-driven solutions (systemd-oomd, Meta oomd) monitor cgroup Pressure Stall Information and take action (kill the cgroup or trigger swap) when pressure exceeds a threshold. Their design assumes (a) a sufficient time window for decision-making after the pressure signal appears, and (b) that kill or migration is an acceptable degradation path. Both assumptions fail for agents: the full cycle from PSI signal generation to user-space daemon reception, decision, and cgroup control file write takes tens of milliseconds, by which time a 1--2 second burst (with change rates of 3\,GB/s) has already passed or triggered kernel intervention. PSI is also a container-level aggregate that cannot attribute pressure to specific tool calls; it reports ``container has pressure'' but not ``pytest caused it.'' Kubernetes VPA adjusts resources at Pod restart level (stable) or minute-level in-place resize (alpha feature), orders of magnitude slower than second-scale tool bursts, making within-execution adjustment impossible.
 
 \subsection{Predictability Gap}
 
@@ -317,9 +313,9 @@ In summary, control granularity is mismatched with tool-call-level dynamics, rea
 \sys is designed around three goals derived from the three gaps identified in \S\ref{sec:gap}:
 
 \begin{itemize}
-	\item \textbf{Dynamic, fine-grained resource alignment} (addressing the granularity gap): Resource domains must align with tool-call boundaries, and policies must adapt to phase transitions rather than applying static limits.
-	\item \textbf{Microsecond-level responsiveness} (addressing the timescale gap): Control logic must react to resource pressure at sub-millisecond timescales, before interference forms.
-	\item \textbf{Runtime adaptability} (addressing the predictability gap): Policies must adjust based on real-time observation rather than historical prediction, using eBPF verification~\cite{ebpf-verifier} and fail-safe mechanisms~\cite{sched-ext} for safe deployment.
+	\item \textbf{Fine-grained resource alignment} (granularity gap): Resource domains align with tool-call boundaries, adapting to phase transitions rather than static limits.
+	\item \textbf{Microsecond-level responsiveness} (timescale gap): Control logic reacts to resource pressure at sub-millisecond timescales, before interference forms.
+	\item \textbf{Runtime adaptability} (predictability gap): Policies adjust based on real-time observation rather than historical prediction, with eBPF verification~\cite{ebpf-verifier} and fail-safe reversion~\cite{sched-ext}.
 \end{itemize}
 
 \sys achieves these goals through two complementary mechanisms: a hierarchical cgroup structure that organizes resources around agent workloads and tool calls, and eBPF-based enforcement that executes control logic at kernel enforcement points.
@@ -349,7 +345,7 @@ Our evaluation is designed to answer three systems questions: (i) does \sys impr
 
 We evaluate \sys on representative agent workloads drawn from common agent sandboxes: a code-oriented workload with compiler/test bursts, a data-analysis workload with working-set swings and memory-intensive operations, and a web/tool workload with mixed CPU and I/O phases. The workloads are executed in a multi-tenant configuration where multiple agent workloads share the same host and contend for CPU and memory. We instrument each workload and tool-call cgroup to collect memory events and scheduler statistics.
 
-Baselines isolate the benefit of in-kernel enforcement: (1) static cgroup v2 knobs with fixed \texttt{cpu.max}, \texttt{memory.high}, and \texttt{memory.max}; (2) a user-space controller similar to TMO's Senpai~\cite{tmo} that monitors pressure and rewrites cgroup files. We also ablate \sys by disabling eBPF enforcement to isolate the contribution of in-kernel execution.
+Baselines isolate the benefit of in-kernel enforcement: (1)~static cgroup~v2 knobs with fixed \texttt{cpu.max}, \texttt{memory.high}, and \texttt{memory\allowbreak.max}; (2)~a user-space controller similar to TMO's Senpai~\cite{tmo} that monitors pressure and rewrites cgroup files. We also ablate \sys by disabling eBPF enforcement to isolate the contribution of in-kernel execution.
 
 Metrics include tail latency (p95/p99), workload completion rate, interference amplification under noisy neighbors, and resource utilization. We use \texttt{memory.events} to distinguish controlled throttling from hard failures~\cite{cgroupv2}.
 
@@ -367,7 +363,7 @@ We measure eBPF verification cost, per-operation overhead on scheduling and memo
 
 \section{Conclusion}
 
-We presented \sys, an eBPF-based resource controller for interactive AI agent workloads. By executing control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, \sys addresses the granularity gap through tool-call-aligned cgroup domains, the timescale gap through microsecond-level in-kernel reaction, and the predictability gap through runtime-adaptive policies. Our results demonstrate that in-kernel enforcement via eBPF is necessary for effective resource management of agent workloads with second-scale bursts.
+We presented \sys, an eBPF-based resource controller for interactive AI agent workloads. By executing control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, \sys addresses the granularity gap through tool-call-aligned cgroup domains, the timescale gap through microsecond-level in-kernel reaction, and the predictability gap through runtime-adaptive policies. In-kernel enforcement via eBPF is necessary for effective resource management of agent workloads with second-scale bursts.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
