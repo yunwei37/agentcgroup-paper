@@ -249,7 +249,7 @@ Haiku and GLM show significant CPU utilization difference on same tasks (Haiku a
 \section{Resource Management Gaps}
 \label{sec:gap}
 
-The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). These differences create three gaps in existing resource management (Table~\ref{tab:gaps}): granularity, timescale, and predictability. We analyze each gap below, explaining why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
+The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). These differences create three resource management mismatches (Table~\ref{tab:mismatch}): granularity, responsiveness, and adaptability. We analyze each mismatch below, explaining why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
 
 \begin{table*}[t]
 	\centering
@@ -272,17 +272,19 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 \begin{table}[t]
 	\centering
 	\small
-	\begin{tabular}{p{1.5cm}p{2.8cm}p{3.2cm}}
+	\setlength{\tabcolsep}{3pt}
+	\begin{tabular}{p{1.2cm}p{1.9cm}p{1.9cm}p{1.9cm}}
 		\hline
-		\textbf{Gap}          & \textbf{Agent Characteristic}                                           & \textbf{Why Existing Tools Fail}                                                            \\
+		& \textbf{Static Limits} & \textbf{Reactive Control} & \textbf{Predictive Scaling} \\
 		\hline
-		Granularity           & Peak/avg 15.4$\times$; 185\,MB baseline + tool bursts                   & \texttt{memory.max/high}: single static threshold; K8s QoS: container-level policy           \\
-		Timescale             & 1--2\,s bursts; $\Delta$ up to GB/s                                     & PSI/oomd: ms-level user-space loop; VPA: minute-level resize                                 \\
-		Predictability        & 1.8$\times$ run variance; non-deterministic tool paths                   & VPA/Autopilot: historical P95 invalid; 20$\times$ cross-task variation                       \\
+		\textbf{Tools} & mem.max/high, cpu.max~\cite{cgroupv2}; K8s QoS~\cite{k8s-qos} & PSI~\cite{psi}; oomd~\cite{systemd-oomd}; TMO~\cite{tmo} & VPA~\cite{k8s-vpa}; Autopilot~\cite{rzadca2020autopilot} \\
+		\textbf{Assumes} & Known peak; stable demand & Gradual pressure; kill acceptable & Repeatable; history valid \\
+		\textbf{Agent} & 15.4$\times$ peak/avg; tool-semantic variation & 1--2\,s burst; unpredictable timing & 1.8$\times$ variance; kill\,=\,lose context \\
+		\textbf{Mismatch} & Granularity & Responsiveness & Adaptability \\
 		\hline
 	\end{tabular}
-	\caption{Three resource management gaps and why existing mechanisms fail for agent workloads.}
-	\label{tab:gaps}
+	\caption{Existing resource management tools and their mismatches with agent workloads.}
+	\label{tab:mismatch}
 \end{table}
 
 \subsection{Granularity Gap}
