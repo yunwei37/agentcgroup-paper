@@ -18,17 +18,17 @@ Agent 的执行过程与传统容器化工作负载存在根本差异。与 serv
 
 **约 6 成时间用于推理、4 成用于工具执行，但任务间差异巨大（0%–86%）。** Agent 执行由 LLM 推理和工具调用两个阶段交替组成。如 Fig-exec (b) 所示，在全部 144 个任务（Haiku 33 + GLM 111）中，以 `active_time`（trace 首条到末条记录的时间跨度，排除容器启动开销）为分母，工具执行时间的中位数占比约 35%（Haiku 34.7%、GLM 36.5%），均值为 Haiku 42.5%、GLM 36.4%。两个模型的中位数接近，表明约 6 成时间用于 LLM 思考、4 成时间用于工具执行的阶段划分是 agent 工作负载的共性特征。然而，这一比例在不同任务间差异巨大，范围从 0% 到 86%（中位数 ~36%），如 Fig-tool-time (a) 所示。
 
-![Fig-exec: 任务执行时间分布 (a) 与执行阶段划分 (b)](../../analysis/comparison_figures/exec_overview.png)
+![Fig-exec: 任务执行时间分布 (a) 与执行阶段划分 (b)](../../analysis/comparison_figures/exec_overview.pdf)
 
 **Bash 和 Task 占据工具执行时间的 90% 以上，但不同模型的工具策略截然不同。** 如 Fig-tool-type 所示，以 Haiku agent（33 个任务）为例分析工具调用结构（Fig-tool-type (a)）。Task（子 agent 调用）和 Bash 分别占工具总执行时间的 47.8%（n=17）和 43.2%（n=410），WebSearch/WebFetch 合计约 5%，其余工具（Read、Grep、Edit 等）合计不足 5%。相比之下，GLM agent 几乎完全依赖 Bash 调用（占工具时间的 99.5%，n=3304），不使用 Task 子 agent 和 Web 搜索工具。进一步分析 Bash 命令的语义类别（Fig-tool-type (b)），在 Haiku 中测试执行（pytest、unittest 等）占 Bash 总时间的 72.9%，包安装占 10.8%；GLM 的分布更分散——测试执行 43.7%、Python 片段 26.9%、包安装 10.1%。不同类型的工具调用具有截然不同的资源消耗特征：测试执行通常是 CPU 和内存密集型操作，而文件探索和 Git 操作则相对轻量。
 
-![Fig-tool-type: 工具执行时间分布 (a) 与 Bash 命令语义类别占比 (b)，Haiku vs GLM](../../analysis/comparison_figures/tool_bash_breakdown.png)
+![Fig-tool-type: 工具执行时间分布 (a) 与 Bash 命令语义类别占比 (b)，GLM agent](../../analysis/comparison_figures/tool_bash_breakdown.pdf)
 
 **不同工具类型的执行时间跨越三个数量级。** Haiku 的 Task 子 agent 平均执行时间高达 100.47 秒（n=17），Bash 命令平均 3.76 秒（n=410）；GLM 的 Bash 命令平均 5.93 秒（n=3304）。相比之下，Read（Haiku avg 0.34s / GLM avg 0.08s）和 Edit（Haiku avg 0.05s / GLM avg 0.04s）操作的执行时间快三个数量级。这种差异表明，不同工具类型需要不同的资源配置策略。两个模型的工具策略差异也具有资源管理启示：Haiku 模型通过 Task 子 agent 和 Web 搜索将部分工作分发到外部服务，而 GLM 模型将所有计算集中在本地 Bash 执行，导致更高的本地资源消耗（Bash 总时间 19598s vs Haiku 1543s）。
 
 **工具调用遵循"理解-修改-验证"的时间模式。** 如 Fig-tool-time (b) 所示，将执行过程划分为 10 个等长阶段后分析工具调用分布，我们发现 Read 操作集中在执行早期（前 30%），对应代码理解阶段；Bash 调用在中后期（40-80%）最为密集，对应测试和验证阶段；Edit 操作分布相对均匀，贯穿整个执行过程。这种阶段性特征与软件工程的"理解-修改-验证"工作流吻合，为相位感知资源控制提供了依据。
 
-![Fig-tool-time: 工具时间占比分布 (a) 与工具调用随执行进度的分布 (b)，全部 144 个任务](../../analysis/comparison_figures/tool_time_pattern.png)
+![Fig-tool-time: 工具时间占比分布 (a) 与工具调用随执行进度的分布 (b)，全部 144 个任务](../../analysis/comparison_figures/tool_time_pattern.pdf)
 
 ## 3.3 RQ2: Resource Usage Characteristics
 
@@ -42,7 +42,7 @@ Agent 的执行过程与传统容器化工作负载存在根本差异。与 serv
 
 **资源消耗由工具语义而非工具类型决定，同为 Bash 调用可差异 13.7 倍。** 相同类型的工具调用（如 Bash）在不同任务上产生截然不同的资源消耗。例如，在 18 个代表性任务中，Medical_Bio 类别的 Bash 调用平均消耗 4GB 峰值内存，而 Web_Network 类别仅需 291MB，差异达到 13.7 倍。这表明资源需求不是由工具类型决定的，而是由工具执行的具体语义决定的——测试执行、数据加载、模型推理等操作即使都通过 Bash 工具调用，其资源特征也完全不同。这一发现对资源控制策略有重要启示：仅基于工具类型的资源分配是不够的，需要更细粒度的语义感知控制。进一步量化不同 Bash 命令类别的资源突发幅度：测试执行（pytest 等）的 P95 内存 spike 高达 518MB（Haiku）/ 234MB（GLM），平均 CPU spike +3.2%；包安装的 P95 内存 spike 约 233MB；而文件探索和 Git 操作的平均内存 spike 仅为 4.5MB 和 13.5MB。同为 Bash 调用，不同语义类别的内存突发幅度相差两个数量级（518MB vs 4.5MB），为基于命令语义的差异化资源配额提供了直接依据。
 
-![Fig-resource: Docker 镜像大小分布 (a) 与聚合内存轨迹 (b)，全部 144 个任务](../../analysis/comparison_figures/resource_profile.png)
+![Fig-resource: Docker 镜像大小分布 (a) 与聚合内存轨迹 (b)，全部 144 个任务](../../analysis/comparison_figures/resource_profile.pdf)
 
 这种资源特征的不可预测性源于三个维度：时间动态性、非确定性和异构性。
 
@@ -50,9 +50,9 @@ Agent 的执行过程与传统容器化工作负载存在根本差异。与 serv
 
 Agent 工作负载的资源使用呈现剧烈的时间波动特征。可以观察到，内存使用在单个采样间隔（1 秒）内变化高达 2.9GB，CPU 利用率出现剧烈波动，峰值超过 100%（多核利用）。资源使用呈现明显的"突发"模式，而非平稳变化。
 
-![Fig-timeseries-haiku: 资源使用时序 — Haiku agent 执行 pre-commit/pre-commit#2524](../../analysis/haiku_figures/rq1_resource_timeseries.png)
+![Fig-timeseries-haiku: 资源使用时序 — Haiku agent 执行 pre-commit/pre-commit#2524](../../analysis/haiku_figures/rq1_resource_timeseries.pdf)
 
-![Fig-timeseries-glm: 资源使用时序 — GLM agent 执行 sigmavirus24/github3.py#673](../../analysis/qwen3_figures/rq1_resource_timeseries.png)
+![Fig-timeseries-glm: 资源使用时序 — GLM agent 执行 sigmavirus24/github3.py#673](../../analysis/qwen3_figures/rq1_resource_timeseries.pdf)
 
 Fig-timeseries-haiku 和 Fig-timeseries-glm 展示了两个具体任务的资源使用时序作为示例：上方为使用 Haiku agent 执行的 pre-commit/pre-commit#2524 任务，下方为使用 GLM agent 执行的 sigmavirus24/github3.py#673 任务。每张图包含两个子图：上方为 CPU 利用率（蓝色），下方为内存使用（绿色），红色阴影区间标注了工具调用（Bash、Read、Edit 等）的执行时段。可以清晰看到资源突发与工具调用高度对齐——CPU 和内存的尖峰几乎都发生在工具执行期间（如运行测试、安装依赖），而工具调用之间的 LLM 推理阶段资源使用相对平稳。这两个示例也体现了不同模型的典型资源差异：Haiku 任务工具调用较为集中，每次执行伴随明显的 CPU 多核突增（峰值超过 175%）；GLM 任务工具调用更加密集频繁，但 CPU 长期维持低水平（~10%），资源波动主要体现在内存维度。尽管具体的资源曲线因任务而异，但这种由工具调用驱动的"突发-静默"交替模式在两个数据集的所有任务中普遍存在。
 
@@ -60,7 +60,7 @@ Fig-timeseries-haiku 和 Fig-timeseries-glm 展示了两个具体任务的资源
 
 如 Fig-change-rate 所示，我们观察到最大内存变化率达到 3GB/秒，最大 CPU 变化率超过 50%/秒。显著变化事件占所有采样点的 1.7%–3.8%。
 
-![Fig-change-rate: 资源变化率分布（CPU 与内存），Haiku 数据集](../../analysis/haiku_figures/rq1_change_rate_distribution.png)
+![Fig-change-rate: 资源变化率分布（CPU 与内存），Haiku 数据集](../../analysis/haiku_figures/rq1_change_rate_distribution.pdf)
 
 **资源突发仅持续 1-2 秒，峰均比高达 15.4 倍，静态限制无论如何设置都不合理。** 资源突发呈现极端的瞬态性（如 Fig-timeseries-haiku 和 Fig-timeseries-glm 中的尖峰所示）。在 18 个代表性任务中，以 Medical_Bio_Hard 任务为例，峰值内存达到 4060MB，而平均内存仅为 264MB，过度供给因子高达 15.4 倍。关键在于，这个 4GB 的峰值仅持续约 1-2 秒，随后立即回落到 230MB 的基线水平。这种"尖峰"模式意味着：如果按峰值设置静态限制，98% 的时间资源都被浪费；如果按平均值设置，则会在突发时触发 OOM。传统的反应式资源调整无法应对如此短暂的突发。
 

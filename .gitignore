@@ -15,8 +15,8 @@ main.bak*
 *.snm
 *.vrb
 comment.cut
-# PDF output
-*.pdf
+# PDF output (only ignore compiled main.pdf, keep figure PDFs)
+main.pdf
 
 # Editor files
 *.swp

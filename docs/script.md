@@ -201,11 +201,11 @@ python analysis/analyze_swebench_data.py --dataset qwen3 --all    # Local/GLM
 
 | 生成图表 | 论文 Figure | characterization.md 章节 | 数据源建议 |
 |----------|-------------|--------------------------|-----------|
-| `rq1_resource_timeseries.png` | Fig. timeseries | 3.3 时间动态性 | Local 111 |
-| `rq1_change_rate_distribution.png` | Fig. changerate | 3.3 时间动态性 | Local 111 |
-| `rq2_category_boxplots.png` | Fig. categories | 3.3 异构性 | **旧 18 tasks**（需 category） |
-| `rq3_tool_analysis.png` | — | 3.2 RQ1 | Local 111 |
-| `rq4_overprovisioning.png` | Fig. overprovisioning | 3.4 RQ3 | 新数据（更有利） |
+| `rq1_resource_timeseries.pdf` | Fig. timeseries | 3.3 时间动态性 | Local 111 |
+| `rq1_change_rate_distribution.pdf` | Fig. changerate | 3.3 时间动态性 | Local 111 |
+| `rq2_category_boxplots.pdf` | Fig. categories | 3.3 异构性 | **旧 18 tasks**（需 category） |
+| `rq3_tool_analysis.pdf` | — | 3.2 RQ1 | Local 111 |
+| `rq4_overprovisioning.pdf` | Fig. overprovisioning | 3.4 RQ3 | 新数据（更有利） |
 
 ### 3.3 analyze_tool_time_ratio.py
 
@@ -220,14 +220,14 @@ python analysis/analyze_tool_time_ratio.py --data-dir experiments/all_images_hai
 
 | 生成图表 | characterization.md 章节 | 数据源建议 |
 |----------|--------------------------|-----------|
-| `chart_03_tool_ratio_distribution.png` | 3.2 阶段划分 | Local 111 |
-| `chart_04_tool_usage_breakdown.png` | 3.2 工具执行时间差异 | Local 111 |
-| `chart_05_tool_timeline.png` | 3.2 工具使用时间分布 | Local 111 |
-| `chart_06_bash_categories.png` | 3.2 工具类型分布 | Local 111 |
-| `chart_09_overhead_analysis.png` | 3.2 磁盘与启动开销 | Local 111 |
-| `chart_10_memory_trajectory.png` | 3.4 聚合内存轨迹 | Local 111 |
-| `chart_12_bash_time_by_category.png` | 3.2 工具语义决定资源消耗 | **旧 18 tasks** |
-| `chart_13_memory_peak_timing.png` | 3.3 时间动态性 | Local 111 |
+| `chart_03_tool_ratio_distribution.pdf` | 3.2 阶段划分 | Local 111 |
+| `chart_04_tool_usage_breakdown.pdf` | 3.2 工具执行时间差异 | Local 111 |
+| `chart_05_tool_timeline.pdf` | 3.2 工具使用时间分布 | Local 111 |
+| `chart_06_bash_categories.pdf` | 3.2 工具类型分布 | Local 111 |
+| `chart_09_overhead_analysis.pdf` | 3.2 磁盘与启动开销 | Local 111 |
+| `chart_10_memory_trajectory.pdf` | 3.4 聚合内存轨迹 | Local 111 |
+| `chart_12_bash_time_by_category.pdf` | 3.2 工具语义决定资源消耗 | **旧 18 tasks** |
+| `chart_13_memory_peak_timing.pdf` | 3.3 时间动态性 | Local 111 |
 
 ### 3.4 analyze_haiku_vs_qwen.py
 
@@ -241,7 +241,7 @@ python analysis/analyze_haiku_vs_qwen.py
 
 | 生成图表 | characterization.md 章节 | 新数据值 |
 |----------|--------------------------|----------|
-| `04_cpu_utilization_comparison.png` | 3.3 异构性 | Haiku 13.2% vs Local 7.6% (1.7x) |
+| `04_cpu_utilization_comparison.pdf` | 3.3 异构性 | Haiku 13.2% vs Local 7.6% (1.7x) |
 
 ### 3.5 analyze_extended_insights.py
 
@@ -274,17 +274,17 @@ python analysis/analyze_rq_validation.py --all
 
 | LaTeX label | 图表文件 | 生成脚本 | 数据源 |
 |-------------|----------|----------|--------|
-| `fig:timeseries` | `rq1_resource_timeseries.png` | `analyze_swebench_data.py --dynamics` | Local 111 |
-| `fig:change_rate` | `rq1_change_rate_distribution.png` | `analyze_swebench_data.py --dynamics` | Local 111 |
-| `fig:categories` | `rq2_category_boxplots.png` | `analyze_swebench_data.py --domain` | **旧 18 tasks** |
-| `fig:cpu_diff` | `04_cpu_utilization_comparison.png` | `analyze_haiku_vs_qwen.py` | 新 30 common |
-| `fig:overprovisioning` | `rq4_overprovisioning.png` | `analyze_swebench_data.py --efficiency` | Local 111 |
-| `fig:tool_ratio` | `chart_03_tool_ratio_distribution.png` | `analyze_tool_time_ratio.py` | Local 111 |
-| `fig:bash_categories` | `chart_06_bash_categories.png` | `analyze_tool_time_ratio.py` | Local 111 |
-| `fig:tool_time` | `chart_04_tool_usage_breakdown.png` | `analyze_tool_time_ratio.py` | Local 111 |
-| `fig:tool_timeline` | `chart_05_tool_timeline.png` | `analyze_tool_time_ratio.py` | Local 111 |
-| `fig:peak_timing` | `chart_13_memory_peak_timing.png` | `analyze_tool_time_ratio.py` | Local 111 |
-| `fig:memory_trajectory` | `chart_10_memory_trajectory.png` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:timeseries` | `rq1_resource_timeseries.pdf` | `analyze_swebench_data.py --dynamics` | Local 111 |
+| `fig:change_rate` | `rq1_change_rate_distribution.pdf` | `analyze_swebench_data.py --dynamics` | Local 111 |
+| `fig:categories` | `rq2_category_boxplots.pdf` | `analyze_swebench_data.py --domain` | **旧 18 tasks** |
+| `fig:cpu_diff` | `04_cpu_utilization_comparison.pdf` | `analyze_haiku_vs_qwen.py` | 新 30 common |
+| `fig:overprovisioning` | `rq4_overprovisioning.pdf` | `analyze_swebench_data.py --efficiency` | Local 111 |
+| `fig:tool_ratio` | `chart_03_tool_ratio_distribution.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:bash_categories` | `chart_06_bash_categories.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:tool_time` | `chart_04_tool_usage_breakdown.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:tool_timeline` | `chart_05_tool_timeline.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:peak_timing` | `chart_13_memory_peak_timing.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
+| `fig:memory_trajectory` | `chart_10_memory_trajectory.pdf` | `analyze_tool_time_ratio.py` | Local 111 |
 
 ## 5. 时间指标定义
 
@@ -366,11 +366,11 @@ python analysis/analyze_new_insights.py --analysis 5   # 仅 token-resource 相�
 
 | 图表文件 | characterization.md 章节 | 说明 |
 |----------|--------------------------|------|
-| `token_distribution.png` | — | Haiku per-turn context 增长 + output 分布 |
-| `tool_burst_correlation.png` | 3.3 时间动态性 | 工具类型 memory spike + Bash 类别 burst profile |
-| `retry_waste.png` | 3.3 非确定性 | 重试组分布 + 重试时间 vs 内存累积 |
-| `concurrency_simulation.png` | 3.4 RQ3 | 静态 vs 动态分配 + 统计复用增益 |
-| `token_resource_correlation.png` | 3.3 非确定性 | Token vs 峰值内存 + Turns vs 执行时间 |
+| `token_distribution.pdf` | — | Haiku per-turn context 增长 + output 分布 |
+| `tool_burst_correlation.pdf` | 3.3 时间动态性 | 工具类型 memory spike + Bash 类别 burst profile |
+| `retry_waste.pdf` | 3.3 非确定性 | 重试组分布 + 重试时间 vs 内存累积 |
+| `concurrency_simulation.pdf` | 3.4 RQ3 | 静态 vs 动态分配 + 统计复用增益 |
+| `token_resource_correlation.pdf` | 3.3 非确定性 | Token vs 峰值内存 + Turns vs 执行时间 |
 
 ## 6. 一键重现
 

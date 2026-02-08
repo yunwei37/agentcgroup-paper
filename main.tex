@@ -18,7 +18,7 @@
 
 %% Graphics support
 \usepackage{graphicx}
-\graphicspath{{../analysis/haiku_figures/}{../analysis/comparison_figures/}{docs/img/}{./docs/img/}}
+\graphicspath{{docs/img/}}
 
 %%
 %% \BibTeX command to typeset BibTeX logo in the docs
@@ -141,7 +141,7 @@ The execution process of agents differs fundamentally from traditional container
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/exec_overview}
+	\includegraphics[width=\columnwidth]{exec_overview}
 	\caption{Task execution time distribution (a) and execution phase division (b).}
 	\label{fig:exec}
 \end{figure}
@@ -150,8 +150,8 @@ The execution process of agents differs fundamentally from traditional container
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/tool_bash_breakdown}
-	\caption{Tool execution time distribution (a) and Bash command semantic category proportion (b), Haiku vs GLM.}
+	\includegraphics[width=\columnwidth]{tool_bash_breakdown}
+	\caption{Tool execution time distribution (a) and Bash command semantic category proportion (b), GLM agent.}
 	\label{fig:tool_type}
 \end{figure}
 
@@ -161,7 +161,7 @@ The execution process of agents differs fundamentally from traditional container
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/tool_time_pattern}
+	\includegraphics[width=\columnwidth]{tool_time_pattern}
 	\caption{Tool time proportion distribution (a) and tool call distribution over execution progress (b), all 144 tasks.}
 	\label{fig:tool_time}
 \end{figure}
@@ -180,7 +180,7 @@ Building on the execution model described in RQ1, this section further analyzes 
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/resource_profile}
+	\includegraphics[width=\columnwidth]{resource_profile}
 	\caption{Docker image size distribution (a) and aggregated memory trajectory (b), all 144 tasks.}
 	\label{fig:resource}
 \end{figure}
@@ -195,14 +195,14 @@ Fig-timeseries-haiku and Fig-timeseries-glm show resource usage time series of t
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/rq1_resource_timeseries}
+	\includegraphics[width=\columnwidth]{rq1_resource_timeseries}
 	\caption{Resource usage time series --- Haiku agent executing pre-commit/pre-commit\#2524.}
 	\label{fig:timeseries_haiku}
 \end{figure}
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/rq1_resource_timeseries_qwen}
+	\includegraphics[width=\columnwidth]{rq1_resource_timeseries_qwen}
 	\caption{Resource usage time series --- GLM agent executing sigmavirus24/github3.py\#673.}
 	\label{fig:timeseries_glm}
 \end{figure}
@@ -213,7 +213,7 @@ As shown in Fig-change-rate, we observed maximum memory change rate reaching 3GB
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=\columnwidth]{docs/img/rq1_change_rate_distribution}
+	\includegraphics[width=\columnwidth]{rq1_change_rate_distribution}
 	\caption{Resource change rate distribution (CPU and memory), Haiku dataset.}
 	\label{fig:change_rate}
 \end{figure}
