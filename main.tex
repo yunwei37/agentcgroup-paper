@@ -126,7 +126,7 @@ We present \sys, an eBPF-based resource controller designed to close these three
 \section{Agent Workload Characterization}
 \label{sec:characterization}
 
-We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, aiming to answer the following research questions: \textbf{RQ1}: What is the execution model of agents? \textbf{RQ2}: What are the characteristics of resource usage in agent workloads? We also discuss the fundamental differences between AI coding agent resource usage patterns and traditional containerized workloads, and the impact of these differences on the applicability and efficiency of existing resource management tools.
+We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, focusing on two questions: what is the execution model of agents, and what are the characteristics of their resource usage?
 
 \subsection{Experimental Setup}
 
@@ -176,7 +176,7 @@ The execution process of agents differs fundamentally from traditional container
 
 \subsection{Resource Usage Characteristics}
 
-Building on the execution model described in RQ1, this section further analyzes the resource usage characteristics of agent workloads. We first present a macro portrait of resource occupation, then analyze their unpredictability from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
+Building on the execution model above, we now analyze resource usage characteristics. We first present a macro portrait of resource occupation, then analyze unpredictability from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
 
 \textbf{Memory, not CPU, is the primary bottleneck for multi-tenant concurrency density.} Agent average CPU utilization is low (Haiku 13.2\%, GLM 7.6\%, single-core baseline), well below saturation on the 24-core experimental platform. Memory is the binding constraint for concurrency density: peak memory can reach 2--4\,GB, so 128\,GB memory with peak allocation can only support 32--64 instances, while CPU utilization at this concurrency still does not exceed 36\% of total capacity. This imbalance means dynamic memory management is key to improving concurrency density: elastic expansion during brief memory bursts, and resource reclamation during idle periods to accommodate more concurrent instances.
 
