@@ -67,7 +67,7 @@
 
 
 \begin{abstract}
-Rapidly being deployed in multi-tenant cloud environments, Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage in production AI coding agents, analyzing 144 SWE-rebench tasks across two models (cloud API and local GPU). Our measurements reveal that tool execution consumes approximately 40\% of agent active time, drives 98.5\% of memory bursts, and exhibits a 15.4$\times$ peak-to-average memory ratio, while container startup adds a further 29--45\% end-to-end latency overhead. Comparing these characteristics against serverless, microservice, and batch workloads, we identify three fundamental gaps in existing resource management: a \emph{granularity gap} (container-level policies vs.\ tool-call-level dynamics), a \emph{timescale gap} (user-space reaction vs.\ second-scale bursts), and a \emph{predictability gap} (history-based prediction vs.\ non-deterministic execution). We present \sys, an eBPF-based resource controller that addresses these gaps through hierarchical cgroup structures aligned with tool-call boundaries, in-kernel enforcement via sched\_ext and memcg\_bpf\_ops, and runtime-adaptive policies. Preliminary evaluation demonstrates improved multi-tenant isolation and reduced resource waste.
+Rapidly being deployed in multi-tenant cloud environments, Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage in production AI coding agents, analyzing 144 SWE-rebench tasks across two models (cloud API and local GPU). Our measurements reveal that tool execution consumes approximately 40\% of agent active time, drives 98.5\% of memory bursts, and exhibits a 15.4$\times$ peak-to-average memory ratio, while container startup adds a further 29--45\% end-to-end latency overhead. Comparing these characteristics against serverless, microservice, and batch workloads, we identify three fundamental mismatches in existing resource management: a \emph{granularity mismatch} (container-level policies vs.\ tool-call-level dynamics), a \emph{responsiveness mismatch} (user-space reaction vs.\ sub-second unpredictable bursts), and an \emph{adaptability mismatch} (history-based prediction vs.\ non-deterministic stateful execution). We present \sys, an eBPF-based resource controller that addresses these mismatches through hierarchical cgroup structures aligned with tool-call boundaries, in-kernel enforcement via sched\_ext and memcg\_bpf\_ops, and runtime-adaptive policies. Preliminary evaluation demonstrates improved multi-tenant isolation and reduced resource waste.
 \end{abstract}
 
 % \begin{CCSXML}
@@ -98,20 +98,20 @@ AI coding agents, systems that combine large language models with autonomous too
 
 To fill this gap, we conducted the first characterization of resource usage in production AI coding agents, analyzing 144 SWE-rebench~\cite{swe-rebench} tasks executed by two models, Haiku (cloud API) and GLM (local GPU), within the same agent framework. Our measurements reveal that LLM reasoning accounts for only 26--44\% of end-to-end task latency. Tool execution consumes approximately 40\% of agent active time and drives 98.5\% of all memory bursts, while container startup adds a further 29--45\% overhead. In other words, OS-level resource management directly affects more than half of the user-perceived task completion time.
 
-Moreover, agent workloads differ fundamentally from traditional cloud workloads in ways that render existing resource controls ineffective. Our analysis reveals three gaps:
+Moreover, agent workloads differ fundamentally from traditional cloud workloads in ways that render existing resource controls ineffective. Our analysis reveals three fundamental mismatches:
 
-\textbf{Granularity gap.} Resource demands vary at tool-call granularity (memory peak-to-average ratio reaches 15.4$\times$, and different Bash commands differ by 13.7$\times$ in memory consumption), but existing controls (cgroup limits, Kubernetes QoS) set a single static policy at container level. Static limits set to peak waste 91--93\% of allocated resources; limits set to average trigger OOM kills during 1--2 second tool bursts, destroying all accumulated LLM context.
+\textbf{Granularity mismatch.} Resource demands vary at tool-call granularity (memory peak-to-average ratio reaches 15.4$\times$, and different Bash commands differ by 13.7$\times$ in memory consumption), but existing controls (cgroup limits, Kubernetes QoS) set a single static policy at container level. Static limits set to peak waste 91--93\% of allocated resources; limits set to average trigger OOM kills during 1--2 second tool bursts, destroying all accumulated LLM context.
 
-\textbf{Timescale gap.} Memory bursts last only 1--2 seconds with change rates reaching several GB/s, yet user-space controllers (systemd-oomd, Kubernetes VPA) operate at tens-of-milliseconds to minutes timescales. By the time a user-space controller observes pressure and adjusts limits, the burst has already passed or caused interference.
+\textbf{Responsiveness mismatch.} Memory bursts last only 1--2 seconds with change rates reaching several GB/s, and their timing is unpredictable due to non-deterministic tool-call sequences. User-space controllers (systemd-oomd, Kubernetes VPA) operate at tens-of-milliseconds to minutes timescales. By the time a user-space controller observes pressure and adjusts limits, the burst has already passed or caused interference.
 
-\textbf{Predictability gap.} Agent workloads are inherently non-deterministic: the same task produces 1.8$\times$ execution time variance across runs, and resource profiles change with the underlying model (1.7$\times$ CPU difference between Haiku and GLM). History-based prediction (moving averages, percentile recommendations, Autopilot~\cite{rzadca2020autopilot}) cannot reliably forecast resource needs.
+\textbf{Adaptability mismatch.} Agent workloads are inherently non-deterministic: the same task produces 1.8$\times$ execution time variance across runs, and resource profiles change with the underlying model (1.7$\times$ CPU difference between Haiku and GLM). History-based prediction (moving averages, percentile recommendations, Autopilot~\cite{rzadca2020autopilot}) cannot reliably forecast resource needs, yet the traditional fallback of kill-and-restart is prohibitively expensive for in-process stateful agents.
 
-We present \sys, an eBPF-based resource controller designed to close these three gaps. \sys organizes resources using hierarchical cgroup v2 structures aligned with tool-call boundaries, executes control logic at kernel enforcement points via sched\_ext~\cite{sched-ext} and memcg\_bpf\_ops~\cite{memcg-bpf} for microsecond-level reaction, and supports runtime-adaptive policies driven by real-time observation rather than historical prediction.
+We present \sys, an eBPF-based resource controller designed to close these three mismatches. \sys organizes resources using hierarchical cgroup v2 structures aligned with tool-call boundaries, executes control logic at kernel enforcement points via sched\_ext~\cite{sched-ext} and memcg\_bpf\_ops~\cite{memcg-bpf} for microsecond-level reaction, and supports runtime-adaptive policies driven by real-time observation rather than historical prediction.
 
 \noindent Our contributions are:
 \begin{itemize}
 	\item \textbf{Characterization.} The first systematic measurement of resource usage in production AI coding agents (144 tasks, 2 models), revealing that tool execution drives 98.5\% of memory bursts and OS-level management affects over half of task latency (\S\ref{sec:characterization}).
-	\item \textbf{Gap analysis.} A quantitative comparison with serverless, microservice, and batch workloads, identifying the granularity, timescale, and predictability gaps that render existing resource controls ineffective (\S\ref{sec:gap}).
+	\item \textbf{Mismatch analysis.} A quantitative comparison with serverless, microservice, and batch workloads, identifying the granularity, responsiveness, and adaptability mismatches that render existing resource controls ineffective (\S\ref{sec:gap}).
 	\item \textbf{System.} \sys, an eBPF-based resource controller with hierarchical cgroup domains, in-kernel enforcement, and runtime-adaptive policies, with preliminary evaluation demonstrating improved isolation and reduced waste (\S\ref{sec:design}, \S\ref{sec:eval}).
 \end{itemize}
 
@@ -174,9 +174,9 @@ The execution process of agents differs fundamentally from traditional container
 	\label{fig:tool_time}
 \end{figure}
 
-\subsection{Resource Usage Characteristics}
+\subsection{Resource Dynamics}
 
-Building on the execution model above, we now analyze resource usage characteristics. We first present a macro portrait of resource occupation, then analyze unpredictability from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
+Building on the execution model above, we now analyze resource dynamics, focusing on memory as the binding constraint and the burst patterns driven by tool execution.
 
 \textbf{Memory, not CPU, is the primary bottleneck for multi-tenant concurrency density.} Agent average CPU utilization is low (Haiku 13.2\%, GLM 7.6\%, single-core baseline), well below saturation on the 24-core experimental platform. Memory is the binding constraint for concurrency density: peak memory can reach 2--4\,GB, so 128\,GB memory with peak allocation can only support 32--64 instances, while CPU utilization at this concurrency still does not exceed 36\% of total capacity. This imbalance means dynamic memory management is key to improving concurrency density: elastic expansion during brief memory bursts, and resource reclamation during idle periods to accommodate more concurrent instances.
 
@@ -192,10 +192,6 @@ Building on the execution model above, we now analyze resource usage characteris
 	\caption{Docker image size distribution (a) and aggregated memory trajectory (b), all 144 tasks.}
 	\label{fig:resource}
 \end{figure}
-
-This unpredictability of resource characteristics stems from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
-
-\subsubsection{Temporal Dynamics}
 
 Agent workloads exhibit dramatic temporal fluctuation in resource usage. It can be observed that memory usage changes by as much as 2.9GB within a single sampling interval (1 second), CPU utilization shows sharp fluctuations with peaks exceeding 100\% (multi-core utilization). Resource usage shows a clear ``burst'' pattern rather than smooth changes.
 
@@ -232,13 +228,11 @@ As shown in Fig-change-rate, we observed maximum memory change rate reaching 3GB
 
 Memory peaks concentrate in the latter half of execution (mean/median about 65\% progress, see Fig-resource~(b)), but the distribution covers the entire execution cycle, further increasing the difficulty of static resource allocation.
 
-\subsubsection{Non-determinism}
+\subsection{Unpredictability}
 
 Unlike traditional containerized workloads, agent workloads exhibit high non-determinism. Even executing the same task multiple times, resource usage patterns and execution results differ significantly. We executed the same task (DevOps\_Build\_Hard) three times, observing execution times of 402, 222, and 259 seconds respectively, a 1.8$\times$ difference. The three executions produced completely different solutions, including different code modifications, different numbers of file changes, and different implementation strategies. This non-determinism stems from the randomness of LLM reasoning and diversity of agent decision paths, making it difficult to predict resource requirements from historical data.
 
 \textbf{85\%--97\% of tasks contain retry loops, consuming 7\%--20\% of execution time and causing progressive memory accumulation.} Retry is inherent behavior of agent workloads: 85\% (28/33) of tasks in Haiku dataset contain retry groups (3 or more consecutive Bash calls), in GLM dataset this ratio reaches 97\% (108/111). GLM averages 3.9 retry groups per task, maximum consecutive retries up to 56 times, retry time averages 20.5\% of total execution time (Haiku 7.4\%). This ``execute test, observe failure, modify code, test again'' iterative pattern is agent's behavioral signature. More importantly, each retry cycle retains previous memory context without cleanup, causing progressive memory accumulation; in the most extreme case, retries cause 502\,MB of memory accumulation that is not released. This behavioral pattern is rare in traditional containerized workloads but common in agent workloads, and its resource impact cannot be predicted in advance. Even LLM-observable proxies offer no help: conversation rounds correlate moderately with execution time (r\,=\,+0.57 to +0.82) but not with peak memory (r\,$<$\,0.11), confirming that resource consumption is driven by tool-call semantics rather than LLM reasoning scale.
-
-\subsubsection{Heterogeneity}
 
 Significant differences exist in resource requirements between different tasks and different models. Among 18 representative tasks, peak memory requirements range from 197MB to 4GB, coefficient of variation (CV) reaches 147\%. ML\_Scientific and Medical\_Bio category tasks exhibit significantly higher memory requirements than CLI\_Tools or Web\_Network tasks, but all tasks run in same container.
 
@@ -246,7 +240,7 @@ Haiku and GLM show significant CPU utilization difference on same tasks (Haiku a
 
 \textbf{Simply changing underlying model produces completely different resource profile.} This CPU utilization difference reflects the essential issue: even with identical agent framework (both Claude Code), simply changing underlying model produces completely different resource profile. Haiku performs inference via cloud API, API calls, response parsing, and context management consume more local CPU; GLM's inference executes on local GPU, CPU load in container comes almost entirely from tool calls (GLM container has only 0.5\% of sampling points with CPU utilization exceeding 50\%, while Haiku reaches 8.2\%). Even executing the same task, CPU distribution, execution duration, and memory trajectories of both models differ significantly. This means resource management strategies cannot make static assumptions based on single category of ``agent workloads'', must adapt to resource profile differences brought by different models.
 
-\section{Resource Management Gaps}
+\section{Resource Management Mismatches}
 \label{sec:gap}
 
 The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). These differences create three resource management mismatches (Table~\ref{tab:mismatch}): granularity, responsiveness, and adaptability. We analyze each mismatch below, explaining why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
@@ -258,8 +252,11 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 		\textbf{Dimension} & \textbf{Serverless/FaaS} & \textbf{Microservices} & \textbf{Batch/HPC} & \textbf{AI Coding Agent}                    \\
 		\hline
 		Execution duration & 100ms--2s                & Long-running           & Minutes--hours     & \textbf{5--11 minutes}                      \\
+		Container image    & $\sim$50\,MB             & 100\,MB--1\,GB         & 1--10\,GB          & \textbf{2.9--17.3\,GB (med.\ 3.5)}          \\
 		Statefulness       & Stateless                & External state         & Stateful           & \textbf{In-process stateful}                \\
-		Memory peak/avg    & ~1.5$\times$             & 2--3$\times$           & ~1$\times$         & \textbf{15.4$\times$}                       \\
+		Memory footprint   & 128--512\,MB             & Steady $\sim$1\,GB     & Scales with data   & \textbf{185\,MB idle, peaks 2--4\,GB}       \\
+		Memory peak/avg    & $\sim$1.5$\times$        & 2--3$\times$           & $\sim$1$\times$    & \textbf{15.4$\times$}                       \\
+		CPU utilization    & Brief spike              & 10--40\%               & 80--100\%          & \textbf{$<$13\% avg, peaks $>$175\%}        \\
 		Determinism        & Deterministic            & Mostly deterministic   & Deterministic      & \textbf{1.8$\times$ variance for same task} \\
 		Resource pattern   & Flat                     & Steady + daily cycle   & Stable rise        & \textbf{Burst-silence alternating}          \\
 		Termination cost   & Just retry               & Can migrate            & Lose progress      & \textbf{Lose all LLM context}               \\
@@ -287,35 +284,35 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 	\label{tab:mismatch}
 \end{table}
 
-\subsection{Granularity Gap}
+\subsection{Granularity Mismatch}
 
 Agent resource demands vary at tool-call granularity, but all existing controls set a single policy at container level. The memory peak-to-average ratio illustrates this most clearly: Azure Functions exhibit near-flat memory~\cite{shahrad2020serverless}, Azure VMs stay within 2--3$\times$~\cite{cortez2017resource}, and Google Autopilot recommends within 2$\times$ of actual peaks~\cite{rzadca2020autopilot}, whereas agent workloads reach 15.4$\times$.
 
 Cgroup~v2 hard limits (\texttt{memory\allowbreak.max}) trigger OOM kill synchronously in the page allocation path. For traditional workloads with peak/avg ratio 2--3$\times$, setting limits to peak causes 50--67\% overprovisioning, usually acceptable. But with agent peak/avg of 15.4$\times$, setting to peak (4060\,MB) wastes 93\% of allocated memory, while setting to average triggers OOM kills during 1--2 second tool bursts, destroying all accumulated agent state. Across all 144 tasks, CPU overprovisioning by peak allocation reaches 11.1$\times$--13.9$\times$. A static threshold fundamentally cannot express the ``low baseline + high burst'' two-layer structure. Soft limits (\texttt{memory\allowbreak.high}) avoid OOM kills through reclaim and throttling, which is effective for traditional workloads where reclaim targets file page cache without affecting correctness. However, agent workloads have two structural problems: reclaim cannot distinguish framework memory (Node.js heap, V8 JIT cache, ${\sim}$185\,MB) from tool subprocess memory, and acting on framework pages causes V8 GC pressure and JIT cache invalidation that extends LLM response parsing time; additionally, a single threshold at container granularity cannot differentiate \texttt{git~status} (13.5\,MB average spike) from \texttt{pytest} (518\,MB P95 spike). Kubernetes QoS classes face the same limitation: Guaranteed allocation wastes 91--93\%, BestEffort is unsuitable for stateful agents, and Burstable with CFS bandwidth control (\texttt{cpu\allowbreak.max}) still operates at container granularity, unable to distinguish the LLM reasoning phase (near-zero CPU, low memory) from tool execution (multi-core burst, high memory) or set per-tool-call quotas. Agent CPU demand is bimodal (GLM: only 0.5\% of sampling points exceed 50\% utilization, yet tool execution peaks exceed 175\%), and a single bandwidth quota cannot adapt to both modes.
 
-\subsection{Timescale Gap}
+\subsection{Responsiveness Mismatch}
 
-Agent resource bursts last only 1--2 seconds with change rates reaching several GB/s, a burst-silence pattern unlike the flat profiles of serverless functions, the diurnal cycles of microservices, or the steady ramps of batch jobs (Table~\ref{tab:comparison}). User-space controllers cannot react fast enough. PSI-driven solutions (systemd-oomd, Meta oomd) monitor cgroup Pressure Stall Information and take action (kill the cgroup or trigger swap) when pressure exceeds a threshold. Their design assumes (a) a sufficient time window for decision-making after the pressure signal appears, and (b) that kill or migration is an acceptable degradation path. Both assumptions fail for agents: the full cycle from PSI signal generation to user-space daemon reception, decision, and cgroup control file write takes tens of milliseconds, by which time a 1--2 second burst (with change rates of 3\,GB/s) has already passed or triggered kernel intervention. PSI is also a container-level aggregate that cannot attribute pressure to specific tool calls; it reports ``container has pressure'' but not ``pytest caused it.'' Kubernetes VPA adjusts resources at Pod restart level (stable) or minute-level in-place resize (alpha feature), orders of magnitude slower than second-scale tool bursts, making within-execution adjustment impossible.
+Agent resource bursts last only 1--2 seconds with change rates reaching several GB/s, a burst-silence pattern unlike the flat profiles of serverless functions, the diurnal cycles of microservices, or the steady ramps of batch jobs (Table~\ref{tab:comparison}). Moreover, their timing is unpredictable due to non-deterministic tool-call sequences. This combination of fast and unpredictable bursts means controllers must react in real time at kernel speed, since pre-allocation based on prediction is not viable. User-space controllers cannot meet this requirement. PSI-driven solutions (systemd-oomd, Meta oomd) monitor cgroup Pressure Stall Information and take action (kill the cgroup or trigger swap) when pressure exceeds a threshold. Their design assumes (a) a sufficient time window for decision-making after the pressure signal appears, and (b) that kill or migration is an acceptable degradation path. Both assumptions fail for agents: the full cycle from PSI signal generation to user-space daemon reception, decision, and cgroup control file write takes tens of milliseconds, by which time a 1--2 second burst (with change rates of 3\,GB/s) has already passed or triggered kernel intervention. PSI is also a container-level aggregate that cannot attribute pressure to specific tool calls; it reports ``container has pressure'' but not ``pytest caused it.'' Kubernetes VPA adjusts resources at Pod restart level (stable) or minute-level in-place resize (alpha feature), orders of magnitude slower than second-scale tool bursts, making within-execution adjustment impossible.
 
-\subsection{Predictability Gap}
+\subsection{Adaptability Mismatch}
 
 Traditional cloud workloads are largely deterministic, allowing history-based resource management: Borg's utilization data guides allocation, and Autopilot~\cite{rzadca2020autopilot} uses historical P95 metrics for automatic recommendations. Agent workloads violate this assumption along two axes. First, resource demand varies 20$\times$ across task categories (CLI\_Tools peak memory 197\,MB vs.\ Medical\_Bio 4060\,MB), so VPA-recommended values are inevitably too high or too low. Second, even the same task produces different resource demands across runs (1.8$\times$ execution time variance), and output token count has near-zero correlation with peak memory (r\,=\,$-$0.14), making historical percentiles statistically meaningless.
 
-This unpredictability is compounded by agents' in-process statefulness: an OOM kill destroys an average of 10 minutes of accumulated LLM context, and non-determinism means re-execution does not guarantee the same solution path. Any strategy that relies on ``kill + restart'' as a fallback, including Kubernetes eviction and systemd-oomd, is therefore prohibitively expensive for agent workloads.
+This unpredictability is compounded by agents' in-process statefulness: an OOM kill destroys an average of 10 minutes of accumulated LLM context, and non-determinism means re-execution does not guarantee the same solution path. Any strategy that relies on ``kill + restart'' as a fallback, including Kubernetes eviction and systemd-oomd, is therefore prohibitively expensive for agent workloads. Effective resource management must therefore adapt at runtime based on real-time observation, with graceful degradation (throttling, freezing) rather than termination.
 
-In summary, control granularity is mismatched with tool-call-level dynamics, reaction timescale is mismatched with sub-second bursts, and prediction assumptions are invalidated by non-determinism. \sys is designed to close these three gaps.
+In summary, control granularity is mismatched with tool-call-level dynamics, responsiveness is mismatched with sub-second unpredictable bursts, and adaptability is mismatched with non-deterministic stateful execution. \sys is designed to close these three mismatches.
 
 \section{Design and Implementation}
 \label{sec:design}
 
 \subsection{Overview}
 
-\sys is designed around three goals derived from the three gaps identified in \S\ref{sec:gap}:
+\sys is designed around three goals derived from the three mismatches identified in \S\ref{sec:gap}:
 
 \begin{itemize}
-	\item \textbf{Fine-grained resource alignment} (granularity gap): Resource domains align with tool-call boundaries, adapting to phase transitions rather than static limits.
-	\item \textbf{Microsecond-level responsiveness} (timescale gap): Control logic reacts to resource pressure at sub-millisecond timescales, before interference forms.
-	\item \textbf{Runtime adaptability} (predictability gap): Policies adjust based on real-time observation rather than historical prediction, with eBPF verification~\cite{ebpf-verifier} and fail-safe reversion~\cite{sched-ext}.
+	\item \textbf{Fine-grained resource alignment} (granularity mismatch): Resource domains align with tool-call boundaries, adapting to phase transitions rather than static limits.
+	\item \textbf{Microsecond-level responsiveness} (responsiveness mismatch): Control logic reacts to resource pressure at sub-millisecond timescales, before interference forms.
+	\item \textbf{Runtime adaptability} (adaptability mismatch): Policies adjust based on real-time observation rather than historical prediction, with graceful degradation instead of termination, eBPF verification~\cite{ebpf-verifier} and fail-safe reversion~\cite{sched-ext}.
 \end{itemize}
 
 \sys achieves these goals through two complementary mechanisms: a hierarchical cgroup structure that organizes resources around agent workloads and tool calls, and eBPF-based enforcement that executes control logic at kernel enforcement points.
@@ -363,7 +360,7 @@ We measure eBPF verification cost, per-operation overhead on scheduling and memo
 
 \section{Conclusion}
 
-We presented \sys, an eBPF-based resource controller for interactive AI agent workloads. By executing control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, \sys addresses the granularity gap through tool-call-aligned cgroup domains, the timescale gap through microsecond-level in-kernel reaction, and the predictability gap through runtime-adaptive policies. In-kernel enforcement via eBPF is necessary for effective resource management of agent workloads with second-scale bursts.
+We presented \sys, an eBPF-based resource controller for interactive AI agent workloads. By executing control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, \sys addresses the granularity mismatch through tool-call-aligned cgroup domains, the responsiveness mismatch through microsecond-level in-kernel reaction, and the adaptability mismatch through runtime-adaptive policies with graceful degradation. In-kernel enforcement via eBPF is necessary for effective resource management of agent workloads whose sub-second, non-deterministic, stateful bursts invalidate the assumptions of existing resource controllers.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
