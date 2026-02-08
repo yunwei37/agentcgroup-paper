@@ -18,7 +18,7 @@
 
 %% Graphics support
 \usepackage{graphicx}
-\graphicspath{{../analysis/haiku_figures/}{../analysis/comparison_figures/}}
+\graphicspath{{../analysis/haiku_figures/}{../analysis/comparison_figures/}{docs/img/}{./docs/img/}}
 
 %%
 %% \BibTeX command to typeset BibTeX logo in the docs
@@ -46,7 +46,7 @@
 \email{yzhen165@ucsc.edu}
 
 \begin{abstract}
-Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage patterns in production AI coding agents, analyzing 18 SWE-rebench tasks across two models. Our measurements reveal severe mismatches: memory usage fluctuates by up to 3GB within single-second intervals, resource requirements vary by 147\% (CV) across task categories, and CPU utilization differs by 3.9$\times$ between agents on identical tasks. These findings expose two fundamental gaps: \textbf{domain mismatch} (static container-level limits cannot accommodate phase-varying tool calls) and \textbf{timescale mismatch} (user-space controllers at 10--100ms cannot react to second-scale bursts). We present \sys, an eBPF-based resource controller that executes control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands. Evaluation demonstrates improved multi-tenant isolation and reduced resource waste from 76--93\% to significantly lower levels.
+	Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and rapid fluctuations. We present the first systematic characterization of resource usage patterns in production AI coding agents, analyzing 18 SWE-rebench tasks across two models. Our measurements reveal severe mismatches: memory usage fluctuates by up to 3GB within single-second intervals, resource requirements vary by 147\% (CV) across task categories, and CPU utilization differs by 3.9$\times$ between agents on identical tasks. These findings expose two fundamental gaps: \textbf{domain mismatch} (static container-level limits cannot accommodate phase-varying tool calls) and \textbf{timescale mismatch} (user-space controllers at 10--100ms cannot react to second-scale bursts). We present \sys, an eBPF-based resource controller that executes control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands. Evaluation demonstrates improved multi-tenant isolation and reduced resource waste from 76--93\% to significantly lower levels.
 \end{abstract}
 
 % \begin{CCSXML}
@@ -85,9 +85,9 @@ We present \sys, an eBPF-based resource controller that addresses both mismatche
 
 Key contributions:
 \begin{itemize}
-    \item \textbf{Characterization:} First systematic measurement study of resource usage patterns in production AI coding agents, quantifying the severity of domain and timescale mismatches (memory changes up to 3GB/second, resource requirement CV of 147\%, 3.9$\times$ CPU difference between agents).
-    \item \textbf{System design:} \sys, an eBPF-based resource controller using sched\_ext and memcg\_bpf\_ops to execute dynamic, phase-aware policies at kernel enforcement points with microsecond-level reaction.
-    \item \textbf{Evaluation:} Comprehensive evaluation on SWE-rebench tasks demonstrating improved multi-tenant isolation and significant reduction in resource waste.
+	\item \textbf{Characterization:} First systematic measurement study of resource usage patterns in production AI coding agents, quantifying the severity of domain and timescale mismatches (memory changes up to 3GB/second, resource requirement CV of 147\%, 3.9$\times$ CPU difference between agents).
+	\item \textbf{System design:} \sys, an eBPF-based resource controller using sched\_ext and memcg\_bpf\_ops to execute dynamic, phase-aware policies at kernel enforcement points with microsecond-level reaction.
+	\item \textbf{Evaluation:} Comprehensive evaluation on SWE-rebench tasks demonstrating improved multi-tenant isolation and significant reduction in resource waste.
 \end{itemize}
 
 \section{Background}
@@ -100,168 +100,190 @@ Key contributions:
 
 \section{Characterization}
 
-We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, aiming to answer the following research questions:
-
-\begin{itemize}
-    \item \textbf{RQ1}: What is the execution model of agents?
-    \item \textbf{RQ2}: What are the characteristics of resource usage in agent workloads? Why is it difficult to predict?
-    \item \textbf{RQ3}: How efficient is static resource allocation?
-\end{itemize}
+We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, aiming to answer the following research questions: \textbf{RQ1}: What is the execution model of agents? \textbf{RQ2}: What are the characteristics of resource usage in agent workloads? We also discuss the fundamental differences between AI coding agent resource usage patterns and traditional containerized workloads, and the impact of these differences on the applicability and efficiency of existing resource management tools.
 
 \subsection{Experimental Setup}
 
-\textbf{Testbed.} All experiments run on a single machine equipped with an Intel Core Ultra 9 285K processor (24 cores, up to 5.8\,GHz), 128\,GB DDR5 RAM, running Ubuntu 24.04.3 LTS with Linux kernel 6.15.11 (cgroup v2 enabled). Each task executes inside an isolated Podman container built from the SWE-rebench Docker images (2.9--17.7\,GB per image). No resource limits are applied during the characterization experiments so that measurements reflect unconstrained resource demand.
+\textbf{Experimental Platform.} All experiments run on a machine equipped with an Intel Core Ultra 9 285K processor (24 cores, up to 5.8\,GHz), 128\,GB DDR5 RAM, running Ubuntu 24.04.3 LTS with Linux kernel 6.15.11 (cgroup v2 enabled). Each task executes in an isolated Podman container using the official SWE-rebench Docker images (single image size 2.9--17.3\,GB). No resource limits are applied during characterization experiments to ensure measurements reflect unconstrained resource demand.
 
-\textbf{Dataset.} We selected 18 tasks from the SWE-rebench dataset, covering six categories (CLI\_Tools, DevOps\_Build, ML\_Scientific, Medical\_Bio, SQL\_Data, Web\_Network) and three difficulty levels (Easy, Medium, Hard). These tasks cover typical use cases for AI coding agents, including command-line tool fixes, build system configuration, machine learning code debugging, biomedical data processing, database query optimization, and web service fixes.
+\textbf{Dataset.} We adopt a two-level dataset strategy. First, we collect 111 tasks (GLM local model) and 33 tasks (Haiku cloud model) from the SWE-rebench dataset for large-scale statistical analysis. Additionally, we select 18 representative tasks covering six categories (CLI\_Tools, DevOps\_Build, ML\_Scientific, Medical\_Bio, SQL\_Data, Web\_Network) and three difficulty levels (Easy, Medium, Hard) for category-level analysis. These tasks cover typical use cases for AI coding agents, including command-line tool fixes, build system configuration, machine learning code debugging, biomedical data processing, database query optimization, and web service fixes.
 
-\textbf{Agent Implementation.} We used two different agent implementations to execute the same 18 tasks: (1)~Claude Code with Haiku, a cloud-based agent that calls the Anthropic API for LLM inference, and (2)~Claude Code connected to a local model GLM 4.7 flash, which performs on-device inference via GPU. These two agents were chosen to observe the impact of different architectures (remote API inference vs.\ local GPU inference) and reasoning strategies on resource usage.
+\textbf{Agent Implementation.} All tasks are executed using the same agent framework---Claude Code, paired with two different underlying models: (1)~Haiku (cloud API), where LLM inference executes in the Anthropic cloud; and (2)~GLM 4.7 flash (local GPU), where LLM inference executes via GPU on the local device. The agent framework itself (tool calling logic, sandbox environment, Node.js runtime) is identical, with the difference only in the underlying model and its inference location. These two models were chosen to observe the impact of different models (and their inference locations: remote API vs. local GPU) on container resource usage.
 
-\textbf{Data Collection.} For each task execution, we sampled CPU utilization and memory usage at 1-second intervals via \texttt{podman stats} (\texttt{--no-stream} mode) and recorded the type, start time, and end time of each tool call. All tasks were executed in the same sandbox environment to ensure measurement comparability.
+\textbf{Data Collection.} For each task execution, we sample CPU utilization and memory usage of each container at 1-second intervals and record the type, start time, and end time of each tool call. All tasks execute in the same sandbox environment to ensure measurement comparability.
 
 \subsection{RQ1: Agent Execution Model}
 
-The execution process of agents differs fundamentally from traditional containerized workloads. Unlike serverless/FaaS processing short-lived stateless requests (100ms--2s), each agent task runs for approximately 10 minutes on average and executes stateful multi-round reasoning and tool call loops.
+The execution process of agents differs fundamentally from traditional containerized workloads. Unlike serverless/FaaS processing short-lived stateless requests (100ms--2s), each agent task runs for approximately 10 minutes on average (GLM average 10.8 minutes, Haiku average 5.8 minutes, median 8.1 minutes; see Fig-exec (a)) and executes stateful multi-round reasoning and tool call loops. Additionally, container startup has non-negligible fixed overhead, averaging 26.5 seconds (median 23.0 seconds), with a maximum of 97 seconds.
 
-\textbf{Disk and Startup Overhead.} Agent workloads demand far more storage resources than traditional containerized applications. In our 115-task dataset, Docker image sizes range from 2.9GB to 17.7GB, with an average of 4.2GB and a median of 3.5GB. The total image size for the entire dataset reaches 469GB. This storage requirement creates significant pressure for multi-tenant deployments. Additionally, container startup has non-negligible fixed overhead: permission fix takes an average of 28.3 seconds, with a maximum of 97 seconds. This means that even if the image is cached (pull time $<$ 1s), nearly half a minute of initialization time is still required before task execution can begin.
-
-\textbf{Phase Division.} Agent execution consists of two alternating phases: LLM reasoning and tool calls. Across all tasks, tool execution time accounts for an average of 28.2\% of total execution time, while LLM thinking time accounts for 71.8\%. However, this ratio varies dramatically between tasks, ranging from 0.1\% to 73.3\%.
+\textbf{Approximately 60\% time for reasoning, 40\% for tool execution, but huge task variation (0\%--86\%).} Agent execution consists of alternating LLM reasoning and tool call phases. As shown in Fig-exec (b), across all 144 tasks (Haiku 33 + GLM 111), using \texttt{active\_time} (time span from trace first to last record, excluding container startup overhead) as denominator, tool execution time median is about 35\% (Haiku 34.7\%, GLM 36.5\%), with means of Haiku 42.5\% and GLM 36.4\%. The medians of both models are close, indicating that the phase division of approximately 60\% time for LLM thinking and 40\% time for tool execution is a common feature of agent workloads. However, this ratio varies dramatically between tasks, ranging from 0\% to 86\% (median ~36\%), as shown in Fig-tool-time (a).
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_03_tool_ratio_distribution}
-\caption{Distribution of tool execution time ratio across tasks. The ratio varies dramatically from 0.1\% to 73.3\%.}
-\label{fig:tool_ratio}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/exec_overview}
+	\caption{Task execution time distribution (a) and execution phase division (b).}
+	\label{fig:exec}
 \end{figure}
 
-\textbf{Tool Type Distribution.} Test execution (pytest, unittest, etc.) accounts for 44.1\% of total Bash time, making it the most time-consuming operation category. Python code snippet execution accounts for 26.7\%, and package installation accounts for 10.9\%. Different types of tool calls have distinctly different resource consumption characteristics: test execution is typically CPU and memory intensive, while file exploration (6.2\%) and Git operations (2.1\%) are relatively lightweight.
+\textbf{Bash and Task account for over 90\% of tool execution time, but different models have drastically different tool strategies.} As shown in Fig-tool-type, analyzing tool call structure using Haiku agent (33 tasks) as an example (Fig-tool-type (a)). Task (sub-agent calls) and Bash account for 47.8\% (n=17) and 43.2\% (n=410) of total tool execution time respectively, with WebSearch/WebFetch combined about 5\%, and other tools (Read, Grep, Edit, etc.) totaling less than 5\%. In contrast, GLM agent relies almost entirely on Bash calls (accounting for 99.5\% of tool time, n=3304), without using Task sub-agents and Web search tools. Further analyzing semantic categories of Bash commands (Fig-tool-type (b)), in Haiku, test execution (pytest, unittest, etc.) accounts for 72.9\% of total Bash time, and package installation accounts for 10.8\%; GLM's distribution is more dispersed---test execution 43.7\%, Python snippets 26.9\%, package installation 10.1\%. Different types of tool calls have distinctly different resource consumption characteristics: test execution is typically CPU and memory intensive, while file exploration and Git operations are relatively lightweight.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_06_bash_categories}
-\caption{Bash command type time distribution. Test execution accounts for 44.1\% of total Bash time.}
-\label{fig:bash_categories}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/tool_bash_breakdown}
+	\caption{Tool execution time distribution (a) and Bash command semantic category proportion (b), Haiku vs GLM.}
+	\label{fig:tool_type}
 \end{figure}
 
-\textbf{Tool Semantics Determine Resource Consumption.} Notably, the same type of tool call (e.g., Bash) produces vastly different resource consumption across different tasks. For example, Bash calls in the Medical\_Bio category consume an average peak memory of 4GB, while the Web\_Network category requires only 291MB, a difference of 13.7 times. This indicates that resource requirements are not determined by tool type but by the specific semantics of tool execution---test execution, data loading, and model inference all have completely different resource characteristics even when invoked through the Bash tool. This finding has important implications for resource control strategies: resource allocation based solely on tool type is insufficient; finer-grained semantic-aware control is needed.
+\textbf{Execution times of different tool types span three orders of magnitude.} Haiku's Task sub-agent has an average execution time as high as 100.47 seconds (n=17), Bash commands average 3.76 seconds (n=410); GLM's Bash commands average 5.93 seconds (n=3304). In contrast, Read (Haiku avg 0.34s / GLM avg 0.08s) and Edit (Haiku avg 0.05s / GLM avg 0.04s) operations are three orders of magnitude faster. This difference indicates that different tool types require different resource allocation strategies. The difference in tool strategies between the two models also has resource management implications: Haiku model distributes some work to external services through Task sub-agents and Web search, while GLM model concentrates all computation on local Bash execution, resulting in higher local resource consumption (Bash total time 19598s vs. Haiku 1543s).
 
-\textbf{Tool Execution Time Differences.} Bash commands have an average execution time of 2.64 seconds, while Task (sub-agent calls) has an average execution time of 66.16 seconds. In contrast, Read and Edit operations have average execution times of only 0.06 seconds and 0.04 seconds respectively. This three-order-of-magnitude difference indicates that different tool types require different resource allocation strategies.
+\textbf{Tool calls follow ``understand-modify-verify'' temporal pattern.} As shown in Fig-tool-time (b), analyzing tool call distribution by dividing the execution process into 10 equal-length phases, we found Read operations concentrate in early execution (first 30\%), corresponding to the code comprehension phase; Bash calls are most dense in middle-to-late phases (40--80\%), corresponding to testing and verification phases; Edit operations are relatively evenly distributed throughout the execution process. This phased characteristic aligns with the software engineering ``understand-modify-verify'' workflow, providing a basis for phase-aware resource control.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_04_tool_usage_breakdown}
-\caption{Tool execution time comparison. Task (sub-agent calls) averages 66.16 seconds, while Read and Edit average 0.06 and 0.04 seconds respectively.}
-\label{fig:tool_time}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/tool_time_pattern}
+	\caption{Tool time proportion distribution (a) and tool call distribution over execution progress (b), all 144 tasks.}
+	\label{fig:tool_time}
 \end{figure}
 
-\textbf{Temporal Distribution of Tool Usage.} Analyzing tool call distribution by dividing the execution process into 10 equal-length phases, we found that Read operations are concentrated in the early stages of execution (first 30\%), corresponding to the code comprehension phase; Bash calls are most dense in the middle-to-late stages (40--80\%), corresponding to testing and verification phases; Edit operations are relatively evenly distributed throughout the execution process. This temporal distribution pattern is consistent with the software engineering ``understand-modify-verify'' workflow, but resource requirements vary significantly across phases.
+\subsection{RQ2: Resource Usage Characteristics}
+
+Building on the execution model described in RQ1, this section further analyzes the resource usage characteristics of agent workloads. We first present a macro portrait of resource occupation, then analyze their unpredictability from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
+
+\textbf{Memory rather than CPU is the decisive bottleneck for multi-tenant concurrency density.} Agent average CPU utilization is extremely low (Haiku 13.2\%, GLM 7.6\%, single-core baseline), CPU is far from saturated on the 24-core experimental platform. Memory is the decisive constraint for concurrency density: peak memory can reach 2--4GB, 128GB memory with peak allocation can only support 32--64 instances, while CPU utilization at this concurrency still does not exceed 36\% of total capacity. This imbalance with CPU mostly idle and memory becoming the bottleneck means dynamic memory management is key to improving concurrency density---elastic expansion during brief memory bursts, resource reclamation during idle periods to accommodate more concurrent instances.
+
+\textbf{Disk storage requirements far exceed traditional containerized applications.} As shown in Fig-resource (a), among 114 deduplicated independent images, Docker image sizes range from 2.9GB to 17.3GB, averaging 4.1GB with median 3.5GB, and highly concentrated in the 3--4GB range, with total image volume for GLM 111 tasks alone reaching 456GB, creating significant storage pressure for multi-tenant deployment.
+
+\textbf{Resource consumption exhibits a two-layer structure of ~185MB framework baseline superimposed with tool bursts.} As shown in Fig-resource (b), the Agent framework itself (e.g., Claude Code based on Node.js runtime) maintains an incompressible memory baseline: across all 144 tasks, average memory in early execution (first 10\% sampling points) is Haiku 183MB, GLM 188MB, median about 185MB. Even during LLM reasoning phases (no tool calls), memory always remains at this baseline level. Dramatic resource fluctuations come almost entirely from subprocesses spawned by tool calls: test execution, dependency installation, and other operations instantly pull memory up to 500MB--2GB, then fall back to baseline. After normalizing memory usage of all tasks to execution progress and aggregating analysis (Fig-resource (b)), first half of execution (0--50\%) memory maintains relatively stable baseline (about 185--200MB), while second half shows upward trend with greater variance, consistent with resource consumption during Bash-dense phases. This means in multi-tenant scenarios, 64 concurrent instances need about 12GB memory just for framework baseline, while superposition of tool bursts is the real resource management challenge. Resource control strategies need to distinguish these two layers---provide stable guarantee for framework baseline, while elastic scheduling for tool bursts.
+
+\textbf{Resource consumption determined by tool semantics rather than tool type, same Bash calls can differ by 13.7 times.} Same type of tool calls (e.g., Bash) produce vastly different resource consumption on different tasks. For example, among 18 representative tasks, Bash calls in Medical\_Bio category consume average peak memory of 4GB, while Web\_Network category needs only 291MB, difference reaching 13.7 times. This indicates resource requirements are not determined by tool type, but by specific semantics of tool execution---test execution, data loading, model inference all have completely different resource characteristics even when invoked through Bash tool. This finding has important implications for resource control strategies: resource allocation based solely on tool type is insufficient, requiring finer-grained semantic-aware control. Further quantifying resource burst amplitude of different Bash command categories: test execution (pytest, etc.) P95 memory spike up to 518MB (Haiku)/234MB (GLM), average CPU spike +3.2\%; package installation P95 memory spike about 233MB; file exploration and Git operations average memory spike only 4.5MB and 13.5MB. Same Bash calls, memory burst amplitude of different semantic categories differs by two orders of magnitude (518MB vs. 4.5MB), providing direct basis for differentiated resource quotas based on command semantics.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_05_tool_timeline}
-\caption{Temporal distribution of tool usage. Read operations concentrate in early phases (first 30\%), Bash calls are most dense in middle-to-late phases (40--80\%).}
-\label{fig:tool_timeline}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/resource_profile}
+	\caption{Docker image size distribution (a) and aggregated memory trajectory (b), all 144 tasks.}
+	\label{fig:resource}
 \end{figure}
 
-\subsection{RQ2: Resource Unpredictability}
-
-Resource usage in agent workloads is difficult to predict. This unpredictability stems from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
+This unpredictability of resource characteristics stems from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
 
 \subsubsection{Temporal Dynamics}
 
-Agent workloads exhibit dramatic temporal fluctuations in resource usage. Memory usage can change by as much as 2.9GB within a single sampling interval (1 second), CPU utilization exhibits sharp fluctuations with peaks exceeding 100\% (multi-core utilization). Resource usage shows a clear ``bursty'' pattern rather than smooth changes.
+Agent workloads exhibit dramatic temporal fluctuation in resource usage. It can be observed that memory usage changes by as much as 2.9GB within a single sampling interval (1 second), CPU utilization shows sharp fluctuations with peaks exceeding 100\% (multi-core utilization). Resource usage shows a clear ``burst'' pattern rather than smooth changes.
+
+Fig-timeseries-haiku and Fig-timeseries-glm show resource usage time series of two specific tasks as examples: above is pre-commit/pre-commit\#2524 task executed with Haiku agent, below is sigmavirus24/github3.py\#673 task executed with GLM agent. Each figure contains two subplots: above is CPU utilization (blue), below is memory usage (green), red shaded intervals mark execution periods of tool calls (Bash, Read, Edit, etc.). It can be clearly seen that resource spikes are highly aligned with tool calls---CPU and memory peaks almost all occur during tool execution (such as running tests, installing dependencies), while resource usage during LLM reasoning phases between tool calls is relatively stable. These two examples also reflect typical resource differences of different models: Haiku task tool calls are relatively concentrated, each execution accompanied by obvious CPU multi-core spikes (peaks exceeding 175\%); GLM task tool calls are more dense and frequent, but CPU remains at low level (~10\%) long-term, resource fluctuations mainly reflected in memory dimension. Although specific resource curves vary by task, this ``burst-silence'' alternating pattern driven by tool calls is universally present across all tasks in both datasets.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{rq1_resource_timeseries}
-\caption{Resource usage time series showing dramatic temporal fluctuations. Memory usage can change by 2.9GB within a single sampling interval.}
-\label{fig:timeseries}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/rq1_resource_timeseries}
+	\caption{Resource usage time series --- Haiku agent executing pre-commit/pre-commit\#2524.}
+	\label{fig:timeseries_haiku}
 \end{figure}
-
-We observed maximum memory change rates of 3GB/second and maximum CPU change rates exceeding 50\%/second. Significant change events (CPU changes exceeding 20\% or memory changes exceeding 50MB/second) account for 1.6\%--4.1\% of all sampling points.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{rq1_change_rate_distribution}
-\caption{Distribution of resource change rates. Maximum memory change rates reach 3GB/second, maximum CPU change rates exceed 50\%/second.}
-\label{fig:change_rate}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/rq1_resource_timeseries_qwen}
+	\caption{Resource usage time series --- GLM agent executing sigmavirus24/github3.py\#673.}
+	\label{fig:timeseries_glm}
 \end{figure}
 
-\textbf{Transient Burst Characteristics.} Resource bursts exhibit extreme transience. Taking the Medical\_Bio\_Hard task as an example, peak memory reaches 4060MB while average memory is only 264MB, yielding an overprovisioning factor of 15.4 times. Crucially, this 4GB peak lasts only about 1--2 seconds before immediately falling back to a baseline level of 230MB. This ``spike'' pattern means: if static limits are set to peak values, resources are wasted 98\% of the time; if set to average values, OOM will be triggered during bursts. Traditional reactive resource adjustment cannot cope with such short-lived bursts.
+\textbf{98.5\% of memory bursts occur during tool calls, resource fluctuations almost entirely driven by tool execution.} To quantify this phenomenon, we label each resource sampling point as ``during tool call'' or ``during LLM reasoning'', and count memory burst events exceeding 300MB for attribution. In Haiku dataset, tool calls account for only 50.6\% of total sampling time, yet contain 98.5\% of memory bursts; in GLM dataset, tool calls account for 35.9\% of time, containing 67.3\% of memory bursts. Concentration of memory bursts in both datasets is 1.9 times---that is, probability of memory bursts during tool calls is nearly 2 times their time proportion. Attribution of CPU bursts is more dispersed: 55.3\% of CPU bursts in Haiku occur during tool calls, only 30.2\% in GLM (GLM's CPU bursts mainly come from local GPU inference scheduling overhead). This asymmetry---memory bursts highly concentrated in tool calls, CPU bursts more evenly distributed---means memory resources should be elastically scheduled at tool call granularity, while CPU resources need broader context awareness.
 
-\textbf{Positive Correlation Between CPU and Memory.} Contrary to intuition, we observed a strong positive correlation between CPU and memory usage (correlation coefficient 91--95\%). This challenges the simplified model of ``low resource consumption during LLM thinking phases, high resource consumption during tool execution phases.'' In reality, memory accumulation occurs during active cognitive processing, not during idle thinking phases. When CPU utilization drops, memory is usually released simultaneously; when CPU spikes, memory grows accordingly. This coupling indicates that resource control needs to coordinate CPU and memory policies together rather than managing them independently.
-
-Memory peaks can occur at any stage of execution---early (first 1/3), middle (middle 1/3), or late (last 1/3). This unpredictability further increases the difficulty of static resource allocation.
+As shown in Fig-change-rate, we observed maximum memory change rate reaching 3GB/second, maximum CPU change rate exceeding 50\%/second. Significant change events account for 1.7\%--3.8\% of all sampling points.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_13_memory_peak_timing}
-\caption{Memory peak timing distribution. Peaks can occur at any stage of execution---early, middle, or late.}
-\label{fig:peak_timing}
+	\centering
+	\includegraphics[width=\columnwidth]{docs/img/rq1_change_rate_distribution}
+	\caption{Resource change rate distribution (CPU and memory), Haiku dataset.}
+	\label{fig:change_rate}
 \end{figure}
+
+\textbf{Resource bursts last only 1--2 seconds, peak-to-average ratio up to 15.4 times, static limits unreasonable regardless of setting.} Resource bursts exhibit extreme transience (spikes shown in Fig-timeseries-haiku and Fig-timeseries-glm). Among 18 representative tasks, taking Medical\_Bio\_Hard task as example, peak memory reaches 4060MB while average memory is only 264MB, overprovisioning factor up to 15.4 times. Key point: this 4GB peak lasts only about 1--2 seconds, then immediately falls back to 230MB baseline level. This ``spike'' pattern means: if static limits set to peak, 98\% of time resources are wasted; if set to average, 1--2 second tool bursts trigger OOM. Traditional reactive resource adjustment cannot cope with such short-lived bursts.
+
+\textbf{CPU and memory correlation varies by task (-0.84 to +0.50), cannot assume co-directional change.} As shown in Fig-timeseries-haiku and Fig-timeseries-glm, correlation between CPU and memory usage shows significant task dependency. Average correlation coefficient across all tasks is -0.39 (ranging from -0.84 to +0.50), indicating CPU peaks and memory peaks do not appear synchronously in most tasks. Some tasks show positive correlation (tool execution phases pull up both CPU and memory), others show negative correlation (CPU-intensive phases have lower memory demand, and vice versa). This task-dependent coupling pattern is harder to cope with than simple positive/negative correlation: resource control strategies cannot assume CPU and memory demands always change in same direction, must independently monitor and coordinate management of both resource dimensions.
+
+Memory peaks concentrate in latter half of execution (mean/median about 65\% progress, see Fig-resource (b)), but distribution covers entire execution cycle, this unpredictability further increases difficulty of static resource allocation.
 
 \subsubsection{Non-determinism}
 
-Unlike traditional containerized workloads, agent workloads exhibit high non-determinism. Even when executing the exact same task multiple times, resource usage patterns and execution results differ significantly. We executed the same task (DevOps\_Build\_Hard) three times and observed: execution times of 402 seconds, 222 seconds, and 259 seconds respectively, a difference of 1.8 times. More importantly, the three executions produced completely different solutions---different code modifications, different numbers of file changes, and even different implementation strategies. This non-determinism stems from the randomness of LLM reasoning and the diversity of agent decision paths, making it extremely difficult to predict resource requirements based on historical data.
+Unlike traditional containerized workloads, agent workloads exhibit high non-determinism. Even executing exactly the same task multiple times, resource usage patterns and execution results differ significantly. We executed same task (DevOps\_Build\_Hard) three times, observing: execution times of 402 seconds, 222 seconds, and 259 seconds respectively, difference reaching 1.8 times. More importantly, three executions produced completely different solutions---different code modifications, different numbers of file changes, even different implementation strategies. This non-determinism stems from randomness of LLM reasoning and diversity of agent decision paths, making predicting resource requirements based on historical data extremely difficult.
 
-\textbf{Retry Loop Pattern.} We observed a significant behavioral pattern: high-iteration tasks exhibit 20--51 ``retry groups'' (3 or more consecutive Bash calls). For example, the Medical\_Bio\_Hard task contains 51 retry groups out of 89 tool calls, with a Bash tool call density of 61.8\%. This pattern is a behavioral signature of iterative failure recovery---the agent repeatedly executes tests, observes failures, modifies code, and tests again. Each retry cycle retains the previous memory context without cleanup, leading to gradual memory accumulation. This behavioral pattern is rare in traditional containerized workloads but common in agent workloads.
+\textbf{85\%--97\% of tasks contain retry loops, consuming 7\%--20\% of execution time and causing progressive memory accumulation.} Retry is inherent behavior of agent workloads: 85\% (28/33) of tasks in Haiku dataset contain retry groups (3 or more consecutive Bash calls), in GLM dataset this ratio reaches 97\% (108/111). GLM averages 3.9 retry groups per task, maximum consecutive retries up to 56 times, retry time averages 20.5\% of total execution time (Haiku 7.4\%). This ``execute test---observe failure---modify code---test again'' iterative pattern is agent's behavioral signature. More importantly, each retry cycle retains previous memory context without cleanup, causing progressive memory accumulation---in most extreme case, retries cause 502MB memory accumulation not released. This behavioral pattern is rare in traditional containerized workloads but common in agent workloads, and its resource impact cannot be predicted in advance.
+
+\textbf{LLM generated token count cannot predict resource consumption.} Analyzing correlation between total output tokens per task and its peak memory in Haiku dataset, correlation coefficient is only r=-0.14 (GLM r=+0.02), basically no linear correlation. Conversation rounds have moderate correlation with execution time (Haiku r=+0.57, GLM r=+0.82), but almost no correlation with peak memory (Haiku r=+0.02, GLM r=+0.11). This means even if able to predict how many tokens agent will generate or how many conversation rounds, still cannot predict memory demand---resource consumption mainly depends on semantics of tool calls, not scale of LLM reasoning itself.
 
 \subsubsection{Heterogeneity}
 
-There are significant differences in resource requirements between different tasks and different agents. Peak memory requirements range from 197MB to 4GB, with a coefficient of variation (CV) of 147\%. ML\_Scientific and Medical\_Bio category tasks exhibit significantly higher memory requirements than CLI\_Tools or Web\_Network tasks, but all tasks run in the same container.
+Significant differences exist in resource requirements between different tasks and different models. Among 18 representative tasks, peak memory requirements range from 197MB to 4GB, coefficient of variation (CV) reaches 147\%. ML\_Scientific and Medical\_Bio category tasks exhibit significantly higher memory requirements than CLI\_Tools or Web\_Network tasks, but all tasks run in same container.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{rq2_category_boxplots}
-\caption{Resource requirements by task category. Peak memory ranges from 197MB to 4GB with CV of 147\%.}
-\label{fig:categories}
-\end{figure}
+Haiku and GLM show significant CPU utilization difference on same tasks (Haiku average 13.2\%, GLM average 7.6\%, difference 1.7 times). Average execution times also differ significantly (Haiku 352 seconds, GLM 664 seconds). This result indicates resource requirements depend not only on task itself, but also on choice of underlying model.
 
-Haiku and Qwen agents show 3.9 times CPU utilization difference on the same 18 tasks (Haiku average 30.6\%, Qwen average 7.9\%). Average execution times also differ significantly (Haiku 400 seconds, Qwen 607 seconds). This result indicates that resource requirements depend not only on the task itself but also on the agent's architecture and implementation.
+\textbf{Simply changing underlying model produces completely different resource profile.} This CPU utilization difference reflects the essential issue: even with identical agent framework (both Claude Code), simply changing underlying model produces completely different resource profile. Haiku performs inference via cloud API, API calls, response parsing, and context management consume more local CPU; GLM's inference executes on local GPU, CPU load in container almost entirely from tool calls---GLM container has only 0.5\% of sampling points with CPU utilization exceeding 50\%, while Haiku reaches 8.2\%. Even executing same task, CPU distribution, execution duration, and memory trajectories of both models differ significantly. This means resource management strategies cannot make static assumptions based on single category of ``agent workloads'', must adapt to resource profile differences brought by different models.
 
-\textbf{Resource Characteristic Differences Between Local Inference and API Inference.} This CPU utilization difference reveals an important architectural distinction. Haiku calls remote models via API, with LLM inference executing in the cloud, but API calls, response parsing, and context management still consume local CPU resources. In contrast, Qwen as a locally deployed model executes LLM inference primarily on GPU, with CPU load in the container only coming from tool calls. This results in only 0.5\% of sampling points exceeding 50\% CPU utilization for Qwen containers, compared to 21.2\% for Haiku. For resource management, this means: API-based agents require more CPU quota for network I/O and protocol overhead; bottlenecks for local inference agents shift to GPU, but GPU resources are currently outside cgroup control. This architectural heterogeneity further increases the difficulty of unified resource management.
+\section{Gap Analysis}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{04_cpu_utilization_comparison}
-\caption{CPU utilization comparison between Haiku and Qwen agents. Haiku averages 30.6\%, Qwen averages 7.9\%, a 3.9$\times$ difference.}
-\label{fig:cpu_diff}
-\end{figure}
+The measurements in the previous two sections reveal unique resource characteristics of agent workloads. This section places these characteristics within the coordinate system of known cloud workloads for quantitative comparison, and systematically analyzes why existing resource management solutions---from kernel cgroup interfaces to cluster-level autoscaling---cannot effectively manage agent workloads.
 
-Based on average CPU utilization, Haiku agents could theoretically run approximately 3 concurrent instances, while Qwen agents could run approximately 12 concurrent instances. However, due to the existence of resource bursts and non-determinism, actual concurrency is limited by peak resource requirements. This reveals a huge gap between theoretical concurrency and achievable concurrency: if allocated by peak memory, a single machine may only be able to run 1--2 agent instances; but if resources can be dynamically adjusted, the same machine could support 3--12 times higher concurrency.
+\subsection{Quantitative Comparison with Known Cloud Workload Types}
 
-\subsection{RQ3: Provisioning Efficiency}
+To understand the uniqueness of agent workloads, we compare the measurement results from RQ1 and RQ2 with three types of typical cloud workloads.
 
-Static resource allocation exhibits severe efficiency problems on agent workloads. If CPU limits are set to peak requirements, actual utilization for the Haiku dataset is only 24\%, wasting 76\%; for the Qwen dataset, actual utilization is only 7\%, wasting 93\%. Overprovisioning factors are 4.1$\times$--13.6$\times$ for CPU and 1.6$\times$--2.4$\times$ for memory.
+\begin{table*}[t]
+	\centering
+	\begin{tabular}{lcccc}
+		\hline
+		\textbf{Dimension} & \textbf{Serverless/FaaS} & \textbf{Microservices} & \textbf{Batch/HPC} & \textbf{AI Coding Agent}                    \\
+		\hline
+		Execution duration & 100ms--2s                & Long-running           & Minutes--hours     & \textbf{5--11 minutes}                      \\
+		Statefulness       & Stateless                & External state         & Stateful           & \textbf{In-process stateful}                \\
+		Memory peak/avg    & ~1.5$\times$             & 2--3$\times$           & ~1$\times$         & \textbf{15.4$\times$}                       \\
+		Determinism        & Deterministic            & Mostly deterministic   & Deterministic      & \textbf{1.8$\times$ variance for same task} \\
+		Resource pattern   & Flat                     & Steady + daily cycle   & Stable rise        & \textbf{Burst-silence alternating}          \\
+		Termination cost   & Just retry               & Can migrate            & Lose progress      & \textbf{Lose all LLM context}               \\
+		\hline
+	\end{tabular}
+	\caption{Quantitative comparison of AI coding agent workloads with typical cloud workloads.}
+	\label{tab:comparison}
+\end{table*}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{rq4_overprovisioning}
-\caption{Static resource limit overprovisioning analysis. Setting limits to peak requirements wastes 76\%--93\% of CPU allocation.}
-\label{fig:overprovisioning}
-\end{figure}
+\textbf{Memory peak-to-average ratio is the most significant difference metric.} Shahrad et al.'s large-scale study of Azure Functions shows typical serverless function memory allocation is 256MB, with extremely minimal runtime memory fluctuations. Cortez et al.'s analysis of Azure VM workloads shows most VM memory utilization remains relatively stable over their lifecycle, with peak/avg typically in the 2--3$\times$ range. Google Autopilot's experience indicates that for most Borg jobs, recommended resource upper limits are within 2$\times$ of actual peaks. In contrast, agent workload memory peak/avg can reach 15.4$\times$ (Medical\_Bio\_Hard task: peak 4060MB / avg 264MB), far exceeding the above workload types. This extreme ratio stems from agent's unique two-layer structure: framework baseline (~185MB) remains stable during LLM reasoning, while tool calls (especially test execution and dependency installation) produce memory spikes lasting only 1--2 seconds.
 
-Static budgets cause problems regardless of how they are set: conservative settings (based on peak) lead to 76\%--93\% resource waste; aggressive settings (based on average) cause OOM or performance degradation during bursts.
+\textbf{Non-determinism makes historical prediction invalid.} Traditional cloud workload resource demands have predictability: Borg's historical utilization data can effectively guide resource allocation; Autopilot uses historical P95 metrics for automatic recommendations, effective for most jobs. However, agent workload resource consumption is driven by LLM reasoning, and LLM output has inherent randomness---same task executed three times produces completely different code modification paths and resource curves (execution time coefficient of variation reaches 1.8$\times$). Additionally, output token count has almost no correlation with peak memory (r=-0.14), conversation rounds also unrelated to peak memory (r=+0.02). This means prediction based on historical metrics---including moving average, exponential smoothing, or percentile methods---are all unreliable on agent workloads.
 
-\textbf{Aggregated Memory Trajectory.} After normalizing the memory usage of all tasks to execution progress (0--100\%) and aggregating the analysis, we observed an interesting pattern: during the first half of execution (0--50\%), memory maintains a relatively stable baseline (approximately 200MB), while during the second half (50--100\%), memory shows an upward trend with greater variance. This indicates that agents perform exploratory operations (reading files, understanding code) during the early execution phase, while the later phase involves actual modifications and testing, involving more data loading and intermediate result accumulation. This phase characteristic provides a basis for phase-aware resource control.
+\textbf{Stateful + long-running makes termination cost extremely high.} Serverless functions are stateless, OOM kill can simply retry from start, typical retry delay only 100ms--2s. Microservices can achieve graceful degradation through Pod drift and state externalization. Agent's entire execution context---LLM conversation history, intermediate code modifications, tool call results---are all stored in process memory. One OOM kill means losing average 10 minutes of stateful computation, and due to non-determinism, re-execution does not guarantee arriving at same solution path. This characteristic makes any resource management strategy using ``kill + restart'' as degradation means (including Kubernetes eviction and systemd-oomd) prohibitively expensive for agent workloads.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{chart_10_memory_trajectory}
-\caption{Aggregated memory trajectory normalized to execution progress. Memory maintains stable baseline in early phases (0--50\%) and shows upward trend with greater variance in later phases (50--100\%).}
-\label{fig:memory_trajectory}
-\end{figure}
+\subsection{Limitations of Existing Resource Management Solutions}
 
-\subsection{Summary and Implications}
+We analyze five types of existing resource management solutions from kernel interfaces to cluster orchestration, clarifying their respective design assumptions and why these assumptions do not apply to agent workloads.
 
-Based on the above observations, we identify two fundamental problems with existing resource management tools when handling AI agent workloads.
+\textbf{(1) cgroup v2 hard limits (\texttt{memory.max} / \texttt{--memory}).} This is the underlying mechanism for Docker and Kubernetes resource limits: when cgroup memory usage reaches \texttt{memory.max}, kernel triggers OOM kill synchronously in page allocation path. For traditional workloads with peak/avg ratio 2--3$\times$, setting hard limits to peak causes 50--67\% overprovisioning, usually acceptable. But agent workload peak/avg reaches 15.4$\times$: setting limit to peak (4060MB), 98\% of time memory usage below 264MB, waste rate up to 93\%; setting to average, 1--2 second tool bursts trigger OOM kill, losing all agent state. Aggregated analysis across all 144 tasks confirms this dilemma---CPU overprovisioning factor by peak allocation reaches 11.1$\times$--13.9$\times$. Fundamental problem of hard limits: it's a one-dimensional, static threshold, cannot express agent workload's ``low baseline + high burst'' two-layer structure.
 
-\textbf{Timescale Mismatch.} The typical workflow of user-space resource controllers involves monitoring resource pressure indicators (such as PSI, memory.events), making adjustment decisions, and then writing to cgroup control files. This cycle typically takes 10--100ms. However, measurements from RQ2 indicate that resource changes in agent workloads occur on second-scale or faster timescales. By the time a user-space controller observes memory pressure and adjusts limits, the burst has already caused reclaim storms or runqueue inflation. Any approach based on user-space monitoring and cgroup file writing cannot respond in time to resource bursts in agent workloads.
+\textbf{(2) cgroup v2 soft limits (\texttt{memory.high}).} \texttt{memory.high} provides more flexible mechanism than hard limits: when memory usage exceeds threshold, kernel triggers direct reclaim and throttling, not OOM kill. This design is effective for traditional workloads---reclaim can reclaim file page cache, throttling slows allocation rate, usually doesn't affect application correctness. However, agent workloads have two structural problems that make \texttt{memory.high} ineffective. First, reclaim cannot distinguish between framework memory (Node.js heap, V8 JIT compilation cache, ~185MB, unreclaimable) and tool subprocess memory (pytest execution, dependency installation, limitable but shouldn't be fully reclaimed). When reclaim acts on framework pages, it causes V8 GC pressure increase and JIT cache invalidation, extending LLM response parsing time, thereby increasing total execution time. Second, \texttt{memory.high} can only set single threshold at container granularity, cannot set differentiated limits for different tool calls---\texttt{git status} (average spike 13.5MB) and \texttt{pytest} (P95 spike 518MB) need completely different memory quotas, but they share same cgroup.
 
-\textbf{Domain Mismatch.} Existing resource controls set static budgets at container granularity (such as Kubernetes resource limits, Docker --memory/--cpus, systemd ResourceControl), but agent workloads require dynamic control at the tool-call level. RQ1 shows that agent execution consists of alternating LLM reasoning and tool call phases, with execution time differences reaching three orders of magnitude between different tool types. RQ2 shows that resource usage has triple unpredictability: temporal dynamics, non-determinism, and heterogeneity. RQ3 shows that static limits lead to 76\%--93\% resource waste. Static resource limits cannot adapt to the dynamic, multi-phase, non-deterministic characteristics of agent workloads.
+\textbf{(3) PSI-driven user-space solutions (systemd-oomd, Meta oomd).} These solutions monitor cgroup's Pressure Stall Information (PSI) metrics, taking action (usually killing entire cgroup or triggering swap) when memory or I/O pressure exceeds threshold. Their design assumptions are: (a) sufficient time window for decision-making after pressure signal appears, (b) kill or migration is acceptable degradation means. Both assumptions do not hold for agent workloads. Assumption (a): agent memory bursts last only 1--2 seconds, change rate reaches 3GB/s (RQ2), complete cycle from PSI signal generation to user-space daemon reception, decision, writing to cgroup control file takes tens of milliseconds, at which point burst may have already ended or triggered kernel direct intervention. Assumption (b): systemd-oomd's default action is kill cgroup, acceptable for stateless services (auto restart), but means losing all context for stateful agent. More fundamentally, PSI is container-level aggregated metric, cannot attribute to specific tool calls---it can only tell controller ``container has pressure'', not ``running pytest process caused pressure''.
 
-Additionally, existing tools lack the ability to express phase-aware control (adjusting resources based on LLM reasoning vs. tool execution phases), tool-type-aware control (allocating resources based on tool type such as test execution vs. file reading), and cross-resource coordination (linking CPU and memory policies).
+\textbf{(4) Cluster-level autoscaling (Kubernetes VPA / Autopilot).} Kubernetes Vertical Pod Autoscaler (VPA) recommends resource request and limit based on historical metrics percentile statistics, Autopilot implements similar functionality on Google Borg. Core assumption of such solutions is resource demand predictable across Pod multiple executions, i.e., ``past P95 is reasonable future upper bound''. Agent workloads violate two premises of this assumption. First, \textbf{same agent resource demand varies by task}: CLI\_Tools category task peak memory 197MB, Medical\_Bio category task peak 4060MB, difference 20$\times$. VPA recommended value inevitably too high or too low. Second, \textbf{even same task, repeated execution resource demand differs}: non-determinism makes historical percentile lose statistical significance. Additionally, VPA adjustment granularity is Pod restart level (current stable version) or minute-level in-place resize (alpha feature), while agent tool bursts occur at second level---VPA cannot dynamically adjust resources within single execution.
 
-These gaps collectively indicate that effective agent resource management requires kernel-level execution (control logic executing at kernel enforcement points for microsecond-level response) and dynamic fine-grained control (resource domains aligned with tool-call boundaries). This is the design motivation for \sys.
+\textbf{(5) Kubernetes QoS classes and CPU bandwidth control.} Kubernetes divides Pods into Guaranteed (request=limit), Burstable (request<limit), and BestEffort (no request) three QoS classes. Guaranteed equivalent to static allocation, previous analysis already shows waste rate 91--93\%. BestEffort evicted first under node pressure, not suitable for stateful agent. Burstable allows Pods to elastically use between request and limit, is closest option to agent demand among three, but still single interval at container granularity---cannot distinguish LLM reasoning phase (near-zero CPU, low memory) and tool execution phase (multi-core burst, high memory), also cannot set differentiated quotas for different tool calls within same container. CFS bandwidth control (\texttt{cpu.max}) similarly faces dilemma: flat CPU quota wastes during API waiting period, throttles during test execution. Agent CPU demand shows extreme bimodal distribution (GLM container only 0.5\% of sampling points exceed 50\% utilization, but CPU peaks during tool execution exceed 175\%), single bandwidth quota cannot adapt to both modes simultaneously.
+
+\subsection{Summary and Design Requirements}
+
+The above analysis reveals a common limitation across all existing solutions: \textbf{control granularity mismatched with agent workload resource granularity}. Existing solutions set single policies at container/Pod granularity, while agent resource demands vary at tool call granularity. This mismatch causes three specific capability gaps:
+
+\textbf{Lack of phase awareness}. Cannot automatically adjust resource policies based on LLM reasoning vs. tool execution phases---reasoning phase should guarantee low latency (CPU priority), tool phase should limit memory peak (prevent OOM).
+
+\textbf{Lack of tool semantics awareness}. Same Bash calls, P95 memory spike of \texttt{pytest} (518MB) vs. \texttt{git status} (13.5MB) differ by two orders of magnitude, but all tools share same cgroup limit.
+
+\textbf{Lack of cross-resource coordination}. CPU and memory correlation varies by task (-0.84 to +0.50), needs independent but coordinated control strategies, while existing interfaces only support setting thresholds independently per resource dimension.
+
+Based on RQ1 (execution model), RQ2 (resource characteristics), and gap analysis in \S~4.1--\S~4.2, we summarize three core characteristics of agent workloads and their implied design requirements:
+
+\textbf{Characteristic 1: Two-layer structure---framework baseline + tool bursts.} Agent maintains ~185MB incompressible framework baseline, tool calls superimpose memory spikes lasting 1--2 seconds, amplitude up to 15.4$\times$. $\to$ \textbf{Design requirement R1}: Control logic must execute in kernel's memory allocation path, making admission/throttling decisions immediately when tool subprocess page allocation requests arrive, rather than asynchronously adjusting thresholds after user-space polling.
+
+\textbf{Characteristic 2: Resource demand varies at tool call granularity.} Different tool type execution times span three orders of magnitude (0.05s--100s), different semantic category memory spikes span two orders of magnitude (4.5MB--518MB), and follow ``understand-modify-verify'' phased pattern. $\to$ \textbf{Design requirement R2}: Resource control domain must align with tool call boundaries, supporting independent resource policy for each tool call (or tool category), rather than setting single limit at container granularity.
+
+\textbf{Characteristic 3: Unpredictability---temporal dynamics $\times$ non-determinism $\times$ heterogeneity.} Resource change rate up to 3GB/s, same task execution time variation 1.8$\times$, different category task peak memory difference 20$\times$. $\to$ \textbf{Design requirement R3}: Resource policies must support runtime dynamic adjustment, making decisions based on real-time observation (rather than historical prediction), and able to adapt to resource profile differences of different models and task types.
+
+These three design requirements---kernel path execution (R1), tool call granularity (R2), runtime adaptability (R3)---jointly define a design space existing solutions cannot cover. AgentCgroup is system design oriented toward this space, which we will introduce in detail in next section.
 
 \section{Design and Implementation}
 
@@ -270,9 +292,9 @@ These gaps collectively indicate that effective agent resource management requir
 \sys is designed around three goals derived from the two mismatches:
 
 \begin{itemize}
-    \item \textbf{Dynamic, fine-grained resource alignment} (addressing domain mismatch): Resource domains must align with tool-call boundaries, and policies must adapt to phase transitions rather than applying static limits.
-    \item \textbf{Microsecond-level responsiveness} (addressing timescale mismatch): Control logic must react to resource pressure at sub-millisecond timescales, before interference forms.
-    \item \textbf{Safety and compatibility}: The system builds on cgroup v2 and eBPF subsystems, using eBPF verification~\cite{ebpf-verifier} and fail-safe mechanisms~\cite{sched-ext} for safe deployment.
+	\item \textbf{Dynamic, fine-grained resource alignment} (addressing domain mismatch): Resource domains must align with tool-call boundaries, and policies must adapt to phase transitions rather than applying static limits.
+	\item \textbf{Microsecond-level responsiveness} (addressing timescale mismatch): Control logic must react to resource pressure at sub-millisecond timescales, before interference forms.
+	\item \textbf{Safety and compatibility}: The system builds on cgroup v2 and eBPF subsystems, using eBPF verification~\cite{ebpf-verifier} and fail-safe mechanisms~\cite{sched-ext} for safe deployment.
 \end{itemize}
 
 \sys achieves these goals through two complementary mechanisms: a hierarchical cgroup structure that organizes resources around agent workloads and tool calls, and eBPF-based enforcement that executes control logic at kernel enforcement points.
