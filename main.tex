@@ -34,6 +34,24 @@
 }
 \email{anonymous@example.com}
 
+\author{Jiakun Fan}
+\affiliation{%
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{VA}
+  \country{USA}
+}
+\email{quanzhif@vt.edu}
+
+\author{Quanzhi Fu}
+\affiliation{%
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{VA}
+  \country{USA}
+}
+\email{jiakunfan@vt.edu}
+
 \begin{abstract}
 Interactive AI agents dynamically execute diverse tool calls within sandboxed environments, each with distinct resource demands and millisecond-scale bursts. Existing resource controls operate at environment granularity with static budgets, unable to provide the dynamic, fine-grained control that agent workloads require. User-space controllers reacting in tens of milliseconds cannot keep pace with sub-millisecond resource fluctuations, allowing interference to form before control actions take effect. We present \sys, an eBPF-based resource controller that executes control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, enabling microsecond-level reaction and dynamic, fine-grained decisions aligned with agent workload demands. Evaluation demonstrates improved multi-tenant isolation and tail latency management with minimal overhead.
 \end{abstract}
