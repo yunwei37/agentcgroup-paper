@@ -136,7 +136,7 @@ We conducted the first systematic measurement study of OS-level resource dynamic
 
 \textbf{Agent Implementation.} All tasks are executed using the same agent framework, Claude Code, paired with two different underlying models: (1)~Claude Haiku 4.5 (cloud API), where LLM inference executes in the Anthropic cloud; and (2)~GLM-4.7-Flash (local GPU), where LLM inference executes via GPU on the local device. The agent framework itself (tool calling logic, sandbox environment, Node.js runtime) is identical, with the difference only in the underlying model and its inference location. These two configurations isolate the impact of model choice and inference location on container resource usage.
 
-\textbf{Data Collection.} For each task execution, we sample CPU utilization and memory usage of each container at 1-second intervals and record the type, start time, and end time of each tool call. All tasks execute in the same sandbox environment to ensure measurement comparability.
+\textbf{Data Collection.} For each task execution, we sample CPU utilization and memory usage of each container at 1-second intervals and record the type, start time, and end time of each tool call. Tool execution time is measured as the interval from when the LLM emits a tool-use request to when the corresponding tool result is returned, encompassing framework dispatch, process execution, and result collection. All tasks execute in the same sandbox environment to ensure measurement comparability.
 
 \subsection{Execution Model}
 
