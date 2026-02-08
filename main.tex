@@ -123,7 +123,7 @@ We present \sys, an eBPF-based resource controller designed to close these three
 
 \textbf{eBPF} enables Linux to address the tension between standardized interfaces and dynamic workloads by introducing programmable enforcement points, providing a safe and dynamically loadable mechanism for executing control logic inside the kernel~\cite{ebpf-verifier}. On the CPU side, \texttt{sched\_ext} allows scheduling policies to be defined by BPF programs with fail-safe reversion to default behavior on errors~\cite{sched-ext}. On the memory side, \texttt{memcg\_bpf\_ops} introduces hooks such as \texttt{get\_high\_delay\_ms} for custom throttle delays on \texttt{memory.high} breaches~\cite{memcg-bpf}. These primitives enable in-kernel enforcement with microsecond-level reaction times.
 
-\section{Characterization}
+\section{Agent Workload Characterization}
 \label{sec:characterization}
 
 We conducted the first systematic measurement study of resource usage patterns in production AI coding agents, aiming to answer the following research questions: \textbf{RQ1}: What is the execution model of agents? \textbf{RQ2}: What are the characteristics of resource usage in agent workloads? We also discuss the fundamental differences between AI coding agent resource usage patterns and traditional containerized workloads, and the impact of these differences on the applicability and efficiency of existing resource management tools.
@@ -138,7 +138,7 @@ We conducted the first systematic measurement study of resource usage patterns i
 
 \textbf{Data Collection.} For each task execution, we sample CPU utilization and memory usage of each container at 1-second intervals and record the type, start time, and end time of each tool call. All tasks execute in the same sandbox environment to ensure measurement comparability.
 
-\subsection{RQ1: Agent Execution Model}
+\subsection{Execution Model}
 
 The execution process of agents differs fundamentally from traditional containerized workloads. Unlike serverless/FaaS processing short-lived stateless requests (100ms--2s), each agent task runs for approximately 10 minutes on average (GLM average 10.8 minutes, Haiku average 5.8 minutes, median 8.1 minutes; see Fig-exec (a)) and executes stateful multi-round reasoning and tool call loops. Additionally, container startup has non-negligible fixed overhead, averaging 26.5 seconds (median 23.0 seconds), with a maximum of 97 seconds.
 
@@ -174,7 +174,7 @@ The execution process of agents differs fundamentally from traditional container
 	\label{fig:tool_time}
 \end{figure}
 
-\subsection{RQ2: Resource Usage Characteristics}
+\subsection{Resource Usage Characteristics}
 
 Building on the execution model described in RQ1, this section further analyzes the resource usage characteristics of agent workloads. We first present a macro portrait of resource occupation, then analyze their unpredictability from three dimensions: temporal dynamics, non-determinism, and heterogeneity.
 
@@ -236,9 +236,7 @@ Memory peaks concentrate in the latter half of execution (mean/median about 65\%
 
 Unlike traditional containerized workloads, agent workloads exhibit high non-determinism. Even executing the same task multiple times, resource usage patterns and execution results differ significantly. We executed the same task (DevOps\_Build\_Hard) three times, observing execution times of 402, 222, and 259 seconds respectively, a 1.8$\times$ difference. The three executions produced completely different solutions, including different code modifications, different numbers of file changes, and different implementation strategies. This non-determinism stems from the randomness of LLM reasoning and diversity of agent decision paths, making it difficult to predict resource requirements from historical data.
 
-\textbf{85\%--97\% of tasks contain retry loops, consuming 7\%--20\% of execution time and causing progressive memory accumulation.} Retry is inherent behavior of agent workloads: 85\% (28/33) of tasks in Haiku dataset contain retry groups (3 or more consecutive Bash calls), in GLM dataset this ratio reaches 97\% (108/111). GLM averages 3.9 retry groups per task, maximum consecutive retries up to 56 times, retry time averages 20.5\% of total execution time (Haiku 7.4\%). This ``execute test, observe failure, modify code, test again'' iterative pattern is agent's behavioral signature. More importantly, each retry cycle retains previous memory context without cleanup, causing progressive memory accumulation; in the most extreme case, retries cause 502\,MB of memory accumulation that is not released. This behavioral pattern is rare in traditional containerized workloads but common in agent workloads, and its resource impact cannot be predicted in advance.
-
-\textbf{LLM generated token count cannot predict resource consumption.} Analyzing correlation between total output tokens per task and its peak memory in Haiku dataset, correlation coefficient is only r=-0.14 (GLM r=+0.02), basically no linear correlation. Conversation rounds have moderate correlation with execution time (Haiku r=+0.57, GLM r=+0.82), but almost no correlation with peak memory (Haiku r=+0.02, GLM r=+0.11). This means even if able to predict how many tokens agent will generate or how many conversation rounds, still cannot predict memory demand, because resource consumption mainly depends on semantics of tool calls, not the scale of LLM reasoning itself.
+\textbf{85\%--97\% of tasks contain retry loops, consuming 7\%--20\% of execution time and causing progressive memory accumulation.} Retry is inherent behavior of agent workloads: 85\% (28/33) of tasks in Haiku dataset contain retry groups (3 or more consecutive Bash calls), in GLM dataset this ratio reaches 97\% (108/111). GLM averages 3.9 retry groups per task, maximum consecutive retries up to 56 times, retry time averages 20.5\% of total execution time (Haiku 7.4\%). This ``execute test, observe failure, modify code, test again'' iterative pattern is agent's behavioral signature. More importantly, each retry cycle retains previous memory context without cleanup, causing progressive memory accumulation; in the most extreme case, retries cause 502\,MB of memory accumulation that is not released. This behavioral pattern is rare in traditional containerized workloads but common in agent workloads, and its resource impact cannot be predicted in advance. Even LLM-observable proxies offer no help: conversation rounds correlate moderately with execution time (r\,=\,+0.57 to +0.82) but not with peak memory (r\,$<$\,0.11), confirming that resource consumption is driven by tool-call semantics rather than LLM reasoning scale.
 
 \subsubsection{Heterogeneity}
 
@@ -248,7 +246,7 @@ Haiku and GLM show significant CPU utilization difference on same tasks (Haiku a
 
 \textbf{Simply changing underlying model produces completely different resource profile.} This CPU utilization difference reflects the essential issue: even with identical agent framework (both Claude Code), simply changing underlying model produces completely different resource profile. Haiku performs inference via cloud API, API calls, response parsing, and context management consume more local CPU; GLM's inference executes on local GPU, CPU load in container comes almost entirely from tool calls (GLM container has only 0.5\% of sampling points with CPU utilization exceeding 50\%, while Haiku reaches 8.2\%). Even executing the same task, CPU distribution, execution duration, and memory trajectories of both models differ significantly. This means resource management strategies cannot make static assumptions based on single category of ``agent workloads'', must adapt to resource profile differences brought by different models.
 
-\section{Gap Analysis}
+\section{Resource Management Gaps}
 \label{sec:gap}
 
 The characterization in \S\ref{sec:characterization} reveals that agent workloads differ from known cloud workloads along several dimensions (Table~\ref{tab:comparison}). These differences create three gaps in existing resource management (Table~\ref{tab:gaps}): granularity, timescale, and predictability. We analyze each gap below, explaining why solutions from kernel cgroup interfaces to cluster-level autoscaling cannot bridge them.
@@ -280,7 +278,7 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 		\hline
 		Granularity           & Peak/avg 15.4$\times$; 185\,MB baseline + tool bursts                   & \texttt{memory.max/high}: single static threshold; K8s QoS: container-level policy           \\
 		Timescale             & 1--2\,s bursts; $\Delta$ up to GB/s                                     & PSI/oomd: ms-level user-space loop; VPA: minute-level resize                                 \\
-		Predictability        & 1.8$\times$ run variance; r\,=\,$-$0.14 token$\leftrightarrow$memory    & VPA/Autopilot: historical P95 invalid; 20$\times$ cross-task variation                       \\
+		Predictability        & 1.8$\times$ run variance; non-deterministic tool paths                   & VPA/Autopilot: historical P95 invalid; 20$\times$ cross-task variation                       \\
 		\hline
 	\end{tabular}
 	\caption{Three resource management gaps and why existing mechanisms fail for agent workloads.}
@@ -336,7 +334,7 @@ On memory, \sys uses \texttt{memcg\_bpf\_ops} hooks~\cite{memcg-bpf} to implemen
 
 A user-space daemon provides APIs to manage cgroup subtrees and subscribes to events. The daemon updates shared BPF maps that parameterize policy functions. For portability, \sys uses libbpf and BPF CO-RE~\cite{libbpf}.
 
-\section{Evaluation}
+\section{Preliminary Evaluation}
 \label{sec:eval}
 
 Our evaluation is designed to answer three systems questions: (i) does \sys improve isolation and tail latency for multi-tenant agent workloads, (ii) does eBPF-based in-kernel enforcement provide benefits that static knobs and user-space control cannot match, and (iii) what is the overhead and operational risk of deploying such policies.
