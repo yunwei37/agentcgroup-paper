@@ -271,8 +271,6 @@ Traditional cloud workloads are largely deterministic, allowing history-based re
 
 This unpredictability is compounded by the prohibitive cost of the traditional fallback: kill-and-restart imposes a \emph{triple penalty} on agent workloads. First, \emph{slow recovery}: agent container images average 3.5\,GB, so cold-start recovery (pulling layers, re-initializing the environment) takes 26--97 seconds (\S\ref{sec:characterization}), two to three orders of magnitude longer than serverless cold starts (${\sim}$50\,MB images). Second, \emph{lost state}: an OOM kill destroys an average of 10 minutes of accumulated in-process LLM context, and unlike microservices with external state stores, this context cannot be checkpointed or migrated. Third, \emph{non-deterministic re-execution}: re-running the same task follows an entirely different solution path (\S\ref{sec:characterization}), so restart does not even guarantee convergence to the original solution. Any strategy that relies on termination as fallback, including Kubernetes eviction, systemd-oomd~\cite{systemd-oomd}, and static OOM kill, incurs all three penalties simultaneously. Effective resource management must therefore adapt at runtime based on real-time observation, with graceful degradation (throttling, freezing) rather than termination.
 
-In summary, control granularity is mismatched with tool-call-level dynamics, responsiveness is mismatched with sub-second unpredictable bursts, and adaptability is mismatched with non-deterministic stateful execution. \sys is designed to close these three mismatches.
-
 \section{\sys Design and Implementation}
 \label{sec:design}
 
@@ -287,9 +285,7 @@ In summary, control granularity is mismatched with tool-call-level dynamics, res
 \section{Preliminary Evaluation}
 \label{sec:eval}
 
-We evaluate \sys by replaying real agent memory traces from \S\ref{sec:characterization} at 50$\times$ accelerated speed in a multi-tenant setting with memcg BPF struct\_ops enforcement. Experiments run on an Intel Core Ultra 7 258V (4 cores, 16\,GB RAM) with a patched Linux 6.19.0-rc5 kernel (bpf-next tree plus the memcg struct\_ops RFC patches~\cite{memcg-bpf}). No application code is modified; isolation is achieved entirely through cgroup boundaries and BPF hooks.
-
-\textbf{Setup.} Three agent traces run concurrently in separate cgroups: dask/dask\#11628 as the HIGH-priority session (peak 421\,MB, \texttt{memory.high\,=\,max}) and two instances of sigmavirus24/github3.py\#673 as LOW-priority sessions (peak 406\,MB each, \texttt{memory.high\,=\,400\,MB}). Under BPF, LOW cgroups are throttled via \texttt{get\_high\_delay\_ms} (50\,ms delay, 10\,000 page-fault threshold) when the HIGH cgroup experiences memory pressure; the HIGH cgroup is protected via \texttt{below\_low}. We compare against a no-isolation baseline under two memory pressure scenarios (Fig.~\ref{fig:eval}).
+We evaluate \sys by replaying real agent memory traces from \S\ref{sec:characterization} at 50$\times$ accelerated speed in a multi-tenant setting with \sys enforcement. Experiments run on an Intel Core Ultra 7 258V (4 cores, 16\,GB RAM) with a patched Linux 6.19.0-rc5 kernel (bpf-next tree plus the memcg struct\_ops RFC patches~\cite{memcg-bpf}). No application code is modified; isolation is achieved entirely through container cgroup boundaries and eBPF hooks. We use three agent traces run concurrently in separate cgroups: dask/dask\#11628 as the HIGH-priority session (peak 421\,MB, \texttt{memory.high\,=\,max}) and two instances of sigmavirus24/github3.py\#673 as LOW-priority sessions (peak 406\,MB each, \texttt{memory.high\,=\,400\,MB}). Under BPF, LOW cgroups are throttled when the HIGH cgroup experiences memory pressure; the HIGH cgroup is protected via \texttt{below\_low}. We compare against a no-isolation baseline under two memory pressure scenarios (Fig.~\ref{fig:eval}).
 
 \begin{figure}[t]
 	\centering
@@ -300,9 +296,9 @@ We evaluate \sys by replaying real agent memory traces from \S\ref{sec:character
 
 \textbf{Results.} Under tight memory (1100\,MB total for ${\sim}$1233\,MB combined demand), the baseline OOM-kills one LOW process (66\% survival); BPF allows all processes to complete (100\%) by throttling LOW allocations (239 delay triggers) while HIGH finishes with only +2.8\% overhead (Fig.~\ref{fig:eval}(a)). BPF also reduces HIGH-priority P95 allocation latency by 29\% (70.97$\to$50.14\,ms) through reduced memory contention (Fig.~\ref{fig:eval}(b)). Enforcement overhead is negligible: P50 latency increases by 0.3\% and total completion time decreases by 1.1\%. Separately, kernel selftests with a 2000\,ms configured delay confirm BPF throttling precision within 2.3\% relative error (2.000\,$\pm$\,0.046\,s measured).
 
-\section{Conclusion}
+\section{Conclusion and Future Work}
 
-We presented \sys, an eBPF-based resource controller for interactive AI agent workloads. By executing control logic at kernel enforcement points via sched\_ext and memcg\_bpf\_ops, \sys addresses the granularity mismatch through tool-call-aligned cgroup domains, the responsiveness mismatch through microsecond-level in-kernel reaction, and the adaptability mismatch through runtime-adaptive policies with graceful degradation. In-kernel enforcement via eBPF is necessary for effective resource management of agent workloads whose sub-second, non-deterministic, stateful bursts invalidate the assumptions of existing resource controllers.
+We characterized AI coding agent tasks across two models, finding OS execution dominates 56--74\% of latency and memory peaks reach 15.4$\times$ average. Based on these findings, we presented \sys, an eBPF-based resource controller addressing granularity, responsiveness, and adaptability mismatches through tool-call-aligned cgroup domains in memory and CPU, microsecond-level reaction, and runtime-adaptive policies. Future work will extend characterization to diverse agents beyond coding, evaluates \sys at production scale, and explores cross-platform portability.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
