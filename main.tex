@@ -21,6 +21,11 @@
 
 %% Allow slightly looser line breaking to avoid overfull hboxes in two-column
 \emergencystretch=1.5em
+
+%% Reduce spacing between floats and text
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
 \graphicspath{{docs/img/}}
 
 %%
@@ -94,7 +99,7 @@
 
 \section{Introduction}
 
-AI coding agents such as Claude Code~\cite{claude-code}, OpenHands~\cite{openhands}, and SWE-agent~\cite{swe-agent} combine large language models with autonomous tool use through a reason-then-act loop~\cite{react} to address software engineering~\cite{wang_llm_agent_survey} and other tasks~\cite{kgent}. These agents execute tool calls (compilers, test runners, package managers) inside sandboxed containers~\cite{claude-code-sandboxing,claude-secure-deployment}. With major vendors like OpenAI~\cite{openai-codex}, GitHub~\cite{github-copilot-coding-agent}, Google~\cite{google-jules}, and Devin~\cite{cognition-devin} now offering such capabilities as commercial products and cloud providers hosting many concurrent agent instances on shared infrastructure~\cite{kim2025costdynamicreasoning,bodea2025trusted,nalar}, efficient resource management becomes critical.
+AI coding agents such as Claude Code~\cite{claude-code}, OpenHands~\cite{openhands}, and SWE-agent~\cite{swe-agent} combine large language models with autonomous tool use through a reason-then-act loop~\cite{react} to address software engineering~\cite{wang_llm_agent_survey} and OS turing~\cite{kgent}. These agents execute tool calls (compilers, test runners, package managers) inside sandboxed containers~\cite{claude-code-sandboxing,claude-secure-deployment}. With major vendors like OpenAI~\cite{openai-codex}, GitHub~\cite{github-copilot-coding-agent}, Google~\cite{google-jules}, and Devin~\cite{cognition-devin} now offering such capabilities as commercial products and cloud providers hosting many concurrent agent instances on shared infrastructure~\cite{kim2025costdynamicreasoning,bodea2025trusted,nalar}, efficient resource management becomes critical.
 
 Effective resource management requires understanding workload behavior, yet a systematic characterization of the OS-level resource dynamics of these agent workloads is lacking. To fill this gap, we characterize these dynamics using Claude Code~\cite{claude-code} across 144 SWE-rebench~\cite{swe-rebench,swe-bench} tasks with two LLM backends: Claude Haiku 4.5 (cloud API) and GLM-4.7-Flash (local GPU). Our analysis reveals four key findings: (1)~OS-level execution (tool calls and container/agent initialization) accounts for 56--74\% of end-to-end task latency, with LLM reasoning accounting for 26--44\%; (2)~memory, not CPU, is the primary bottleneck for multi-tenant concurrency density; (3)~memory exhibits a two-layer structure with a stable ${\sim}$185\,MB framework baseline plus tool-call-driven bursts reaching a 15.4$\times$ peak-to-average ratio; and (4)~resource demands are highly unpredictable, varying 20$\times$ across tasks and 1.8$\times$ across runs of the same task.
 
@@ -218,6 +223,7 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 
 \begin{table*}[t]
 	\centering
+	\setlength{\tabcolsep}{10pt}
 	\begin{tabular}{lcccc}
 		\hline
 		\textbf{Dimension} & \textbf{Serverless/FaaS}~\cite{shahrad2020serverless} & \textbf{Microservices}~\cite{cortez2017resource} & \textbf{Batch/HPC}~\cite{verma2015borg} & \textbf{AI Coding Agent}                    \\
@@ -241,7 +247,7 @@ The characterization in \S\ref{sec:characterization} reveals that agent workload
 	\centering
 	\small
 	\setlength{\tabcolsep}{3pt}
-	\begin{tabular}{p{1.2cm}p{1.9cm}p{1.9cm}p{1.9cm}}
+	\begin{tabular}{p{1.3cm}p{2.05cm}p{2.1cm}p{2.05cm}}
 		\hline
 		                  & \textbf{Static Limits}                                        & \textbf{Reactive Control}                                          & \textbf{Predictive Scaling}                              \\
 		\hline
