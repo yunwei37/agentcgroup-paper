@@ -120,7 +120,7 @@ We present \sys, an eBPF-based resource controller that closes these mismatches 
 \section{Agent Workload Characterization}
 \label{sec:characterization}
 
-This section details our characterization, focusing on three aspects: the execution model of agents, the dynamics of their resource usage, and the unpredictability of their resource demands.
+Designing effective resource controls requires understanding workload behavior, as prior studies of serverless~\cite{shahrad2020serverless}, microservice~\cite{cortez2017resource}, and batch~\cite{verma2015borg} workloads have shown. We characterize AI coding agent workloads along three axes: execution model (\S\ref{sec:characterization}.2), resource dynamics (\S\ref{sec:characterization}.3), and unpredictability (\S\ref{sec:characterization}.4).
 
 \subsection{Experimental Setup}
 
@@ -128,9 +128,9 @@ All experiments run on a single machine (Intel Core Ultra 9 285K, 24 cores, 128\
 
 \subsection{Execution Model}
 
-Unlike traditional containerized workloads like serverless/FaaS processing short-lived stateless requests (100ms--2s)~\cite{shahrad2020serverless} or long-running web services, each agent task runs for 5--11 minutes (GLM mean 10.8, Haiku mean 5.8, overall median 8.1; Fig.~\ref{fig:exec}(a)) and executes stateful multi-round reasoning and tool-call loops. Container startup also adds fixed overhead (mean 26.5\,s, median 23.0\,s, max 97\,s).
+Each agent task runs for 5--11 minutes (GLM mean 10.8, Haiku mean 5.8, overall median 8.1; Fig.~\ref{fig:exec}(a)), far longer than serverless invocations (100\,ms--2\,s) yet shorter than batch jobs, and executes stateful multi-round reasoning and tool-call loops. Container startup also adds fixed overhead (mean 26.5\,s, median 23.0\,s, max 97\,s).
 
-\textbf{LLM reasoning accounts for only 26--44\% of end-to-end task latency; the remainder is consumed by tool execution (${\sim}$40\% of active time) and container startup (29--45\%).} As shown in Fig.~\ref{fig:exec}(b), excluding container startup, tool execution median is about 35\% of active time (Haiku 34.7\%, GLM 36.5\%), though individual tasks range from 0\% to 86\% (Fig.~\ref{fig:tool_time}(a)). Over the full container lifecycle, container startup accounts for 31--48\%, tool execution ${\sim}$26\%, and LLM reasoning only 26--44\%. OS-level resource management (startup + tool execution) thus directly affects 56--74\% of user-perceived task completion time.
+\textbf{LLM reasoning accounts for only 26--44\% of end-to-end task latency; the remainder is consumed by tool execution (${\sim}$40\% of active time) and container startup (29--45\%).} As shown in Fig.~\ref{fig:exec}(b), excluding container startup, tool execution accounts for a mean of 42.5\% (Haiku) and 36.4\% (GLM) of active time (median 34.7\% and 36.5\% respectively), though individual tasks range from 0\% to 86\% (Fig.~\ref{fig:tool_time}(a)). Over the full container lifecycle, container startup accounts for 31--48\%, tool execution ${\sim}$26\%, and LLM reasoning only 26--44\%. OS-level resource management (startup + tool execution) thus directly affects 56--74\% of user-perceived task completion time.
 
 
 \begin{figure}[t]
@@ -140,7 +140,7 @@ Unlike traditional containerized workloads like serverless/FaaS processing short
 	\label{fig:exec}
 \end{figure}
 
-\textbf{Bash dominates tool execution, spanning three orders of magnitude in duration.} As shown in Fig.~\ref{fig:tool_type}(a), Bash and the sub-agent tool (which delegates to a new agent instance) together account for over 90\% of total tool execution time in Haiku (47.8\% and 43.2\% respectively), while GLM relies almost entirely on Bash (99.5\% of tool time). Execution times span three orders of magnitude: sub-agent calls average ${\sim}$100\,s, Bash commands 4--6\,s, and lightweight tools such as Read and Edit under 0.5\,s. The two models adopt different strategies: Haiku distributes work via sub-agent calls and Web search, while GLM concentrates all computation in local Bash calls.
+\textbf{Bash dominates tool execution, spanning three orders of magnitude in duration.} In Haiku, Bash and the sub-agent tool (which delegates to a new agent instance) together account for over 90\% of total tool execution time (47.8\% and 43.2\% respectively); GLM relies almost entirely on Bash (98.1\% of tool time, Fig.~\ref{fig:tool_type}(a)). Execution times span three orders of magnitude: sub-agent calls average ${\sim}$100\,s, Bash commands 4--6\,s, and lightweight tools such as Read and Edit under 0.5\,s. The two models adopt different strategies: Haiku distributes work via sub-agent calls and Web search, while GLM concentrates all computation in local Bash calls.
 
 Further analyzing Bash command semantics (Fig.~\ref{fig:tool_type}(b)), test execution (pytest, unittest, etc.) dominates Bash time in both models (Haiku 72.9\%, GLM 43.7\%), followed by package installation (${\sim}$10\%) and Python snippets (GLM 26.9\%). Resource demands vary accordingly: test execution is CPU- and memory-intensive, while file exploration and Git operations are lightweight. Tool calls also follow a temporal ``understand-modify-verify'' pattern (Fig.~\ref{fig:tool_time}(b)): Read concentrates in the first 30\% of execution, Bash peaks in 40--80\%, and Edit is distributed evenly.
 
@@ -160,7 +160,7 @@ Further analyzing Bash command semantics (Fig.~\ref{fig:tool_type}(b)), test exe
 
 \subsection{Resource Dynamics}
 
-Building on the execution model above, we now examine which resource dimensions tool calls stress most, how resource consumption fluctuates over time, and how CPU and memory dynamics interact.
+We now examine whether agent resource profiles match the moderate, predictable patterns assumed by existing controllers.
 
 \textbf{Memory, not CPU, is the primary bottleneck for multi-tenant concurrency density.} Agent average CPU utilization is low (Haiku 13.2\%, GLM 7.6\%, normalized to one core, i.e., 100\%\,=\,one fully utilized core), well below saturation on the 24-core experimental platform. Peak memory can reach 2--4\,GB, so 128\,GB of RAM with peak allocation supports only 32--64 instances, while CPU utilization at this concurrency remains below 36\% of total capacity.
 
@@ -190,7 +190,7 @@ Building on the execution model above, we now examine which resource dimensions 
 	\label{fig:timeseries_glm}
 \end{figure}
 
-\textbf{Resource bursts last 1--2 seconds with peak-to-average ratio up to 15.4$\times$, an order of magnitude beyond traditional cloud workloads.} The most extreme case, pydicom/pydicom\#2022, has peak memory of 4060\,MB while average memory is only 264\,MB, a 15.4$\times$ ratio; this peak falls back to the 230\,MB baseline within seconds (Fig.~\ref{fig:timeseries_haiku}, Fig.~\ref{fig:timeseries_glm}). Memory peaks concentrate in the latter half of execution (mean/median $\sim$65\% progress) but occur throughout the execution cycle. Change rates are equally extreme: maximum memory change rate reaches 3\,GB/s, CPU change rate exceeds 50\%/second, with 1.7\%--3.8\% of 1-second intervals showing memory changes exceeding 100\,MB (Fig.~\ref{fig:change_rate}).
+\textbf{Resource bursts last 1--2 seconds with peak-to-average ratio up to 15.4$\times$, an order of magnitude beyond traditional cloud workloads.} The most extreme case, pydicom/pydicom\#2022, has peak memory of 4060\,MB while average memory is only 264\,MB, a 15.4$\times$ ratio; this peak falls back to the 230\,MB baseline within seconds (Fig.~\ref{fig:timeseries_haiku}, Fig.~\ref{fig:timeseries_glm}). Memory peaks concentrate in the latter half of execution (mean/median $\sim$65\% progress) but occur throughout the execution cycle. Change rates are equally extreme: maximum memory change rate reaches 3\,GB/s, CPU change rate exceeds 50\%/second, with 1.7\%--3.8\% of 1-second intervals showing memory changes exceeding 100\,MB. Defining burst thresholds at 20\%/s for CPU and 50\,MB/s for memory (dashed lines in Fig.~\ref{fig:change_rate}), a substantial tail of sampling intervals exceeds these thresholds.
 
 \begin{figure}[t]
 	\centering
